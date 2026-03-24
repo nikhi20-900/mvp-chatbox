@@ -29,6 +29,8 @@ api.interceptors.request.use((config) => {
     return Promise.reject(new Error(DEPLOY_CONFIG_ERROR));
   }
 
+  config.withCredentials = true;
+
   const token = getStoredToken();
 
   if (token) {

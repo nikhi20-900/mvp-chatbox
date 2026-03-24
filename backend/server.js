@@ -19,8 +19,11 @@ if (missingEnvVars.length > 0) {
 
 mongoose.set("bufferCommands", false);
 
+const isProduction = process.env.NODE_ENV === "production";
 const localOrigins = ["http://127.0.0.1:5173", "http://localhost:5173"];
-const allowedOrigins = [...new Set([process.env.CLIENT_URL, ...localOrigins].filter(Boolean))];
+const allowedOrigins = isProduction
+  ? [process.env.CLIENT_URL].filter(Boolean)
+  : [...new Set([process.env.CLIENT_URL, ...localOrigins].filter(Boolean))];
 
 const isAllowedOrigin = (origin) => {
   if (!origin) {
@@ -56,6 +59,7 @@ const server = http.createServer(app);
 
 initSocket(server, isAllowedOrigin);
 
+app.set("trust proxy", 1);
 app.use(express.json());
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));

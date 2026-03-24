@@ -7,3 +7,6 @@ frontend/.env
 .mongodb
 .node
 *.log
+
+# Local Netlify folder
+.netlify
