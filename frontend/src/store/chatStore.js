@@ -2,6 +2,8 @@ import { create } from "zustand";
 import api, { getErrorMessage } from "../lib/api";
 import useAuthStore from "./authStore";
 
+const TYPING_DEBOUNCE_MS = 1500;
+
 const isMessageForSelectedChat = (message, selectedUserId, authUserId) =>
   (message.senderId === selectedUserId && message.receiverId === authUserId) ||
   (message.senderId === authUserId && message.receiverId === selectedUserId);
@@ -54,6 +56,14 @@ const useChatStore = create((set, get) => ({
   chatError: "",
   messageListener: null,
 
+  /* ── Typing state ──────────────────────────────────────── */
+  typingUsers: {},
+  _typingTimer: null,
+  _isTypingEmitted: false,
+
+  /* ── Unread tracking ───────────────────────────────────── */
+  firstUnreadIndex: -1,
+
   clearChatError: () => set({ chatError: "" }),
 
   setSelectedUser: (user) =>
@@ -61,8 +71,10 @@ const useChatStore = create((set, get) => ({
       selectedUser: user,
       messages: [],
       chatError: "",
+      firstUnreadIndex: -1,
     }),
 
+  /* ── Users ─────────────────────────────────────────────── */
   fetchUsers: async () => {
     set({ isUsersLoading: true });
 
@@ -76,6 +88,7 @@ const useChatStore = create((set, get) => ({
     }
   },
 
+  /* ── Messages ──────────────────────────────────────────── */
   fetchMessages: async (userId) => {
     if (!userId) {
       return;
@@ -85,7 +98,19 @@ const useChatStore = create((set, get) => ({
 
     try {
       const { data } = await api.get(`/messages/${userId}`);
-      set({ messages: data, chatError: "" });
+
+      /* Find where unread messages start */
+      const authUserId = useAuthStore.getState().authUser?._id;
+      let firstUnread = -1;
+
+      for (let i = 0; i < data.length; i++) {
+        if (data[i].senderId !== authUserId && !data[i].readAt) {
+          firstUnread = i;
+          break;
+        }
+      }
+
+      set({ messages: data, chatError: "", firstUnreadIndex: firstUnread });
     } catch (error) {
       set({ chatError: getErrorMessage(error, "Failed to fetch messages") });
     } finally {
@@ -93,6 +118,7 @@ const useChatStore = create((set, get) => ({
     }
   },
 
+  /* ── Send ───────────────────────────────────────────────── */
   sendMessage: async (text) => {
     const selectedUserId = get().selectedUser?._id;
 
@@ -101,6 +127,9 @@ const useChatStore = create((set, get) => ({
     }
 
     set({ isSendingMessage: true });
+
+    /* Stop typing indicator on send */
+    get().emitTypingStop(selectedUserId);
 
     try {
       const { data } = await api.post(`/messages/send/${selectedUserId}`, { text });
@@ -122,6 +151,69 @@ const useChatStore = create((set, get) => ({
     }
   },
 
+  /* ── Read receipts ─────────────────────────────────────── */
+  markAsRead: async (userId) => {
+    if (!userId) {
+      return;
+    }
+
+    try {
+      await api.post(`/messages/read/${userId}`);
+
+      /* Clear unread count for this user in the sidebar */
+      set((state) => ({
+        users: state.users.map((user) =>
+          user._id === userId ? { ...user, unreadCount: 0 } : user
+        ),
+        firstUnreadIndex: -1,
+      }));
+    } catch {
+      /* silently fail – non-critical */
+    }
+  },
+
+  /* ── Typing emission ───────────────────────────────────── */
+  emitTypingStart: (toUserId) => {
+    const socket = useAuthStore.getState().socket;
+
+    if (!socket || !toUserId) {
+      return;
+    }
+
+    const { _isTypingEmitted, _typingTimer } = get();
+
+    if (_typingTimer) {
+      clearTimeout(_typingTimer);
+    }
+
+    if (!_isTypingEmitted) {
+      socket.emit("typing:start", { toUserId });
+      set({ _isTypingEmitted: true });
+    }
+
+    const timer = setTimeout(() => {
+      get().emitTypingStop(toUserId);
+    }, TYPING_DEBOUNCE_MS);
+
+    set({ _typingTimer: timer });
+  },
+
+  emitTypingStop: (toUserId) => {
+    const socket = useAuthStore.getState().socket;
+    const { _typingTimer, _isTypingEmitted } = get();
+
+    if (_typingTimer) {
+      clearTimeout(_typingTimer);
+    }
+
+    if (socket && toUserId && _isTypingEmitted) {
+      socket.emit("typing:stop", { toUserId });
+    }
+
+    set({ _typingTimer: null, _isTypingEmitted: false });
+  },
+
+  /* ── Socket subscriptions ──────────────────────────────── */
   subscribeToMessages: () => {
     const socket = useAuthStore.getState().socket;
     const authUserId = useAuthStore.getState().authUser?._id;
@@ -130,6 +222,11 @@ const useChatStore = create((set, get) => ({
 
     if (socket && currentListener) {
       socket.off("newMessage", currentListener);
+      socket.off("typing:start");
+      socket.off("typing:stop");
+      socket.off("message:delivered");
+      socket.off("message:read");
+      socket.off("user:updated");
     }
 
     if (!socket || !authUserId || !selectedUserId) {
@@ -137,6 +234,7 @@ const useChatStore = create((set, get) => ({
       return;
     }
 
+    /* New message handler */
     const nextListener = (newMessage) => {
       const activeSelectedUserId = get().selectedUser?._id;
       const currentAuthUserId = useAuthStore.getState().authUser?._id;
@@ -154,17 +252,20 @@ const useChatStore = create((set, get) => ({
         );
 
         if (!shouldAppend) {
-          return {
-            users: nextUsers,
-          };
+          /* Update unread count for the sender */
+          const updatedUsers = nextUsers.map((user) =>
+            user._id === newMessage.senderId
+              ? { ...user, unreadCount: (user.unreadCount || 0) + 1 }
+              : user
+          );
+
+          return { users: updatedUsers };
         }
 
         const alreadyExists = state.messages.some((message) => message._id === newMessage._id);
 
         if (alreadyExists) {
-          return {
-            users: nextUsers,
-          };
+          return { users: nextUsers };
         }
 
         return {
@@ -174,6 +275,65 @@ const useChatStore = create((set, get) => ({
       });
     };
 
+    /* Typing indicators */
+    socket.on("typing:start", ({ fromUserId }) => {
+      set((state) => ({
+        typingUsers: { ...state.typingUsers, [fromUserId]: true },
+      }));
+    });
+
+    socket.on("typing:stop", ({ fromUserId }) => {
+      set((state) => {
+        const next = { ...state.typingUsers };
+        delete next[fromUserId];
+        return { typingUsers: next };
+      });
+    });
+
+    /* Delivery & read status updates */
+    socket.on("message:delivered", ({ messageIds, deliveredAt }) => {
+      if (!messageIds?.length) {
+        return;
+      }
+
+      const idSet = new Set(messageIds);
+
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          idSet.has(msg._id) ? { ...msg, deliveredAt: msg.deliveredAt || deliveredAt } : msg
+        ),
+      }));
+    });
+
+    socket.on("message:read", ({ messageIds, readAt }) => {
+      if (!messageIds?.length) {
+        return;
+      }
+
+      const idSet = new Set(messageIds);
+
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          idSet.has(msg._id)
+            ? { ...msg, deliveredAt: msg.deliveredAt || readAt, readAt: msg.readAt || readAt }
+            : msg
+        ),
+      }));
+    });
+
+    /* User profile updates */
+    socket.on("user:updated", (updatedUser) => {
+      set((state) => ({
+        users: state.users.map((user) =>
+          user._id === updatedUser._id ? { ...user, ...updatedUser } : user
+        ),
+        selectedUser:
+          state.selectedUser?._id === updatedUser._id
+            ? { ...state.selectedUser, ...updatedUser }
+            : state.selectedUser,
+      }));
+    });
+
     socket.on("newMessage", nextListener);
     set({ messageListener: nextListener });
   },
@@ -182,20 +342,38 @@ const useChatStore = create((set, get) => ({
     const socket = useAuthStore.getState().socket;
     const listener = get().messageListener;
 
-    if (socket && listener) {
-      socket.off("newMessage", listener);
+    if (socket) {
+      if (listener) {
+        socket.off("newMessage", listener);
+      }
+
+      socket.off("typing:start");
+      socket.off("typing:stop");
+      socket.off("message:delivered");
+      socket.off("message:read");
+      socket.off("user:updated");
     }
 
-    set({ messageListener: null });
+    set({ messageListener: null, typingUsers: {} });
   },
 
   resetChat: () => {
+    const { _typingTimer } = get();
+
+    if (_typingTimer) {
+      clearTimeout(_typingTimer);
+    }
+
     get().unsubscribeFromMessages();
     set({
       users: [],
       selectedUser: null,
       messages: [],
       chatError: "",
+      typingUsers: {},
+      _typingTimer: null,
+      _isTypingEmitted: false,
+      firstUnreadIndex: -1,
     });
   },
 }));

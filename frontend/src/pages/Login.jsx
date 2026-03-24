@@ -49,18 +49,28 @@ const Login = () => {
     }
   };
 
+  const inputStyle = {
+    background: "var(--color-input-bg)",
+    borderColor: "var(--color-input-border)",
+    color: "var(--color-text-primary)",
+  };
+
   return (
     <AuthShell
       eyebrow="Welcome back"
       title="Log in"
-      description="Access your account and jump straight into your active conversations."
+      description="Access your account and jump into your conversations."
       alternateLabel="Create account"
       alternateHref="/signup"
       alternateText="Need a profile?"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-200" htmlFor="email">
+          <label
+            className="mb-1.5 block text-sm font-medium"
+            style={{ color: "var(--color-text-primary)" }}
+            htmlFor="email"
+          >
             Email
           </label>
           <input
@@ -70,14 +80,19 @@ const Login = () => {
             autoComplete="email"
             value={formData.email}
             onChange={handleChange}
-            className="w-full rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-accent/60"
+            className="w-full rounded-xl border px-3.5 py-3 text-sm outline-none transition-all theme-transition"
+            style={inputStyle}
             placeholder="you@example.com"
             required
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-200" htmlFor="password">
+          <label
+            className="mb-1.5 block text-sm font-medium"
+            style={{ color: "var(--color-text-primary)" }}
+            htmlFor="password"
+          >
             Password
           </label>
           <input
@@ -87,14 +102,22 @@ const Login = () => {
             autoComplete="current-password"
             value={formData.password}
             onChange={handleChange}
-            className="w-full rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-accent/60"
+            className="w-full rounded-xl border px-3.5 py-3 text-sm outline-none transition-all theme-transition"
+            style={inputStyle}
             placeholder="Enter your password"
             required
           />
         </div>
 
         {authError ? (
-          <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+          <div
+            className="rounded-xl border px-4 py-2.5 text-sm"
+            style={{
+              borderColor: "rgba(239,68,68,0.2)",
+              background: "rgba(239,68,68,0.08)",
+              color: "#ef4444",
+            }}
+          >
             {authError}
           </div>
         ) : null}
@@ -102,9 +125,13 @@ const Login = () => {
         <button
           type="submit"
           disabled={isLoggingIn}
-          className="w-full rounded-2xl bg-gradient-to-r from-accent to-highlight px-4 py-3.5 text-sm font-semibold text-ink transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-xl py-3 text-sm font-semibold transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          style={{
+            background: "var(--color-accent)",
+            color: "#fff",
+          }}
         >
-          {isLoggingIn ? "Logging in..." : "Log in"}
+          {isLoggingIn ? "Logging in…" : "Log in"}
         </button>
       </form>
     </AuthShell>

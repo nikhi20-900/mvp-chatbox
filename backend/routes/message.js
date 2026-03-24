@@ -73,10 +73,20 @@ const markIncomingConversationState = async ({
   if (readIds.length) {
     operations.push({
       updateMany: {
-        filter: { _id: { $in: readIds } },
+        filter: { _id: { $in: readIds }, deliveredAt: null },
         update: {
           $set: {
             deliveredAt: readAt,
+            readAt,
+          },
+        },
+      },
+    });
+    operations.push({
+      updateMany: {
+        filter: { _id: { $in: readIds }, deliveredAt: { $ne: null } },
+        update: {
+          $set: {
             readAt,
           },
         },

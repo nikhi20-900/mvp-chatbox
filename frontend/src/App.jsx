@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Home from "./pages/Home";
+import Profile from "./pages/Profile";
 import ToastStack from "./components/ToastStack";
 import useAuthStore from "./store/authStore";
 
@@ -26,15 +27,35 @@ const App = () => {
 
   if (isCheckingAuth) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-6">
-        <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-slate-950/60 p-8 text-center shadow-soft backdrop-blur">
-          <div className="mx-auto h-14 w-14 animate-pulse rounded-2xl bg-gradient-to-br from-accent to-highlight" />
-          <p className="mt-6 text-sm uppercase tracking-[0.35em] text-slate-400">
+      <div
+        className="flex min-h-screen items-center justify-center px-6"
+        style={{ background: "var(--color-bg-page)" }}
+      >
+        <div
+          className="w-full max-w-sm rounded-2xl border p-8 text-center theme-transition"
+          style={{
+            background: "var(--color-panel)",
+            borderColor: "var(--color-border)",
+          }}
+        >
+          <div
+            className="mx-auto h-12 w-12 animate-pulse rounded-xl"
+            style={{ background: "var(--color-accent)" }}
+          />
+          <p
+            className="mt-5 text-xs uppercase tracking-widest"
+            style={{ color: "var(--color-text-muted)" }}
+          >
             Syncing session
           </p>
-          <h1 className="mt-3 text-2xl font-semibold text-white">Opening your workspace</h1>
-          <p className="mt-2 text-sm text-slate-400">
-            We&apos;re checking your account and reconnecting the live chat.
+          <h1
+            className="mt-2 text-xl font-semibold"
+            style={{ color: "var(--color-text-primary)" }}
+          >
+            Opening your workspace
+          </h1>
+          <p className="mt-1.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            Checking your account and reconnecting the live chat.
           </p>
         </div>
       </div>
@@ -48,6 +69,10 @@ const App = () => {
         <Route path="/" element={authUser ? <Home /> : <Navigate to="/login" replace />} />
         <Route path="/login" element={!authUser ? <Login /> : <Navigate to="/" replace />} />
         <Route path="/signup" element={!authUser ? <Signup /> : <Navigate to="/" replace />} />
+        <Route
+          path="/profile"
+          element={authUser ? <Profile /> : <Navigate to="/login" replace />}
+        />
       </Routes>
     </>
   );

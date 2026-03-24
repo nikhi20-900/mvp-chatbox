@@ -18,6 +18,7 @@ const useAuthStore = create((set, get) => ({
   isLoggingIn: false,
   isSigningUp: false,
   isLoggingOut: false,
+  isUpdatingProfile: false,
   authError: "",
 
   clearAuthError: () => set({ authError: "" }),
@@ -93,6 +94,21 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
+  /* ── Profile update ────────────────────────────────────── */
+  updateProfile: async (payload) => {
+    set({ isUpdatingProfile: true });
+
+    try {
+      const { data } = await api.patch("/auth/profile", payload);
+      set({ authUser: data, isUpdatingProfile: false });
+      return { success: true };
+    } catch (error) {
+      const message = getErrorMessage(error, "Failed to update profile");
+      set({ isUpdatingProfile: false });
+      return { success: false, message };
+    }
+  },
+
   connectSocket: () => {
     const { authUser, socket } = get();
 
@@ -131,6 +147,15 @@ const useAuthStore = create((set, get) => ({
 
     nextSocket.on("disconnect", () => {
       set({ onlineUserIds: [] });
+    });
+
+    /* Update own profile if changed from another tab */
+    nextSocket.on("user:updated", (updatedUser) => {
+      const currentUser = get().authUser;
+
+      if (currentUser && currentUser._id === updatedUser._id) {
+        set({ authUser: { ...currentUser, ...updatedUser } });
+      }
     });
 
     set({ socket: nextSocket });

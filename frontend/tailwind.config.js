@@ -4,15 +4,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        surface: "#0f172a",
-        panel: "#111827",
-        border: "#1e293b",
-        accent: "#2dd4bf",
-        highlight: "#fb923c",
-        ink: "#020617",
+        app: "rgb(var(--app) / <alpha-value>)",
+        surface: "rgb(var(--surface) / <alpha-value>)",
+        panel: "rgb(var(--panel) / <alpha-value>)",
+        elevated: "rgb(var(--elevated) / <alpha-value>)",
+        border: "rgb(var(--border) / <alpha-value>)",
+        text: "rgb(var(--text) / <alpha-value>)",
+        muted: "rgb(var(--muted) / <alpha-value>)",
+        accent: "rgb(var(--accent) / <alpha-value>)",
+        accentStrong: "rgb(var(--accent-strong) / <alpha-value>)",
+        success: "rgb(var(--success) / <alpha-value>)",
+        danger: "rgb(var(--danger) / <alpha-value>)",
       },
       boxShadow: {
-        soft: "0 20px 50px rgba(2, 6, 23, 0.35)",
+        soft: "0 18px 48px rgba(15, 23, 42, 0.14)",
+        float: "0 10px 30px rgba(15, 23, 42, 0.12)",
       },
     },
   },
