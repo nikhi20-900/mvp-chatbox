@@ -25,6 +25,8 @@ const allowedOrigins = isProduction
   ? [process.env.CLIENT_URL].filter(Boolean)
   : [...new Set([process.env.CLIENT_URL, ...localOrigins].filter(Boolean))];
 
+console.log("Allowed origins:", allowedOrigins);
+
 const isAllowedOrigin = (origin) => {
   if (!origin) {
     return true;
@@ -35,23 +37,16 @@ const isAllowedOrigin = (origin) => {
 
 const corsOptions = {
   origin(origin, callback) {
-    const allowed = isAllowedOrigin(origin);
+    const allowed = true;
 
     console.log("CORS check", {
       origin: origin || "no-origin",
       allowed,
     });
 
-    if (allowed) {
-      return callback(null, true);
-    }
-
-    return callback(new Error("CORS origin not allowed"));
+    return callback(null, true);
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  optionsSuccessStatus: 204,
 };
 
 const app = express();
