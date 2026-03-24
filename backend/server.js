@@ -19,21 +19,36 @@ if (missingEnvVars.length > 0) {
 
 mongoose.set("bufferCommands", false);
 
-const allowedOriginPatterns = [
-  /^http:\/\/127\.0\.0\.1:\d+$/,
-  /^http:\/\/localhost:\d+$/,
-];
+const localOrigins = ["http://127.0.0.1:5173", "http://localhost:5173"];
+const allowedOrigins = [...new Set([process.env.CLIENT_URL, ...localOrigins].filter(Boolean))];
 
 const isAllowedOrigin = (origin) => {
   if (!origin) {
     return true;
   }
 
-  if (process.env.CLIENT_URL && origin === process.env.CLIENT_URL) {
-    return true;
-  }
+  return allowedOrigins.includes(origin);
+};
 
-  return allowedOriginPatterns.some((pattern) => pattern.test(origin));
+const corsOptions = {
+  origin(origin, callback) {
+    const allowed = isAllowedOrigin(origin);
+
+    console.log("CORS check", {
+      origin: origin || "no-origin",
+      allowed,
+    });
+
+    if (allowed) {
+      return callback(null, true);
+    }
+
+    return callback(new Error("CORS origin not allowed"));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 204,
 };
 
 const app = express();
@@ -41,19 +56,9 @@ const server = http.createServer(app);
 
 initSocket(server, isAllowedOrigin);
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (isAllowedOrigin(origin)) {
-        return callback(null, true);
-      }
-
-      return callback(new Error("CORS origin not allowed"));
-    },
-    credentials: true,
-  })
-);
 app.use(express.json());
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(cookieParser());
 
 app.get("/", (_req, res) => {

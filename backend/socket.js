@@ -44,7 +44,14 @@ const initSocket = (server, isAllowedOrigin = () => true) => {
   ioInstance = new Server(server, {
     cors: {
       origin(origin, callback) {
-        if (isAllowedOrigin(origin)) {
+        const allowed = isAllowedOrigin(origin);
+
+        console.log("Socket CORS check", {
+          origin: origin || "no-origin",
+          allowed,
+        });
+
+        if (allowed) {
           return callback(null, true);
         }
 

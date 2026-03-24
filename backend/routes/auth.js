@@ -6,19 +6,24 @@ import protectRoute from "../middleware/auth.js";
 
 const router = express.Router();
 
+const getCookieOptions = () => {
+  const isProduction = process.env.NODE_ENV === "production";
+
+  return {
+    httpOnly: true,
+    sameSite: isProduction ? "none" : "lax",
+    secure: isProduction,
+    path: "/",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  };
+};
+
 const generateTokenAndSetCookie = (userId, res) => {
   const token = jwt.sign({ userId }, process.env.JWT_SECRET, {
     expiresIn: "7d",
   });
 
-  const isProduction = process.env.NODE_ENV === "production";
-
-  res.cookie("jwt", token, {
-    httpOnly: true,
-    sameSite: isProduction ? "none" : "lax",
-    secure: isProduction,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  res.cookie("jwt", token, getCookieOptions());
 
   return token;
 };
@@ -48,11 +53,10 @@ router.post("/signup", async (req, res) => {
     }
 
     if (password.length < 6) {
-      return res
-        .status(400)
-        .json({ message: "Password must be at least 6 characters" });
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
     }
 
+    console.log("Checking existing user", { email: normalizedEmail });
     const existingUser = await User.findOne({ email: normalizedEmail });
 
     console.log("Signup lookup completed", {
@@ -80,6 +84,11 @@ router.post("/signup", async (req, res) => {
 
     const token = generateTokenAndSetCookie(newUser._id, res);
 
+    console.log("Sending signup response", {
+      userId: newUser._id.toString(),
+      email: normalizedEmail,
+    });
+
     return res.status(201).json(formatAuthResponse(newUser, token));
   } catch (error) {
     console.error("Signup failed:", error);
@@ -98,6 +107,7 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Email and password are required" });
     }
 
+    console.log("Checking login user", { email: normalizedEmail });
     const user = await User.findOne({ email: normalizedEmail }).select("+password");
 
     console.log("Login lookup completed", {
@@ -117,6 +127,11 @@ router.post("/login", async (req, res) => {
 
     const token = generateTokenAndSetCookie(user._id, res);
 
+    console.log("Sending login response", {
+      userId: user._id.toString(),
+      email: normalizedEmail,
+    });
+
     return res.status(200).json(formatAuthResponse(user, token));
   } catch (error) {
     console.error("Login failed:", error);
@@ -125,13 +140,7 @@ router.post("/login", async (req, res) => {
 });
 
 router.post("/logout", (req, res) => {
-  const isProduction = process.env.NODE_ENV === "production";
-
-  res.clearCookie("jwt", {
-    httpOnly: true,
-    sameSite: isProduction ? "none" : "lax",
-    secure: isProduction,
-  });
+  res.clearCookie("jwt", getCookieOptions());
   return res.status(200).json({ message: "Logged out successfully" });
 });
 

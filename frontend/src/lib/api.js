@@ -18,6 +18,10 @@ export const clearStoredToken = () => sessionStorage.removeItem(AUTH_TOKEN_STORA
 const api = axios.create({
   baseURL: API_BASE_URL || undefined,
   withCredentials: true,
+  timeout: 15000,
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
 api.interceptors.request.use((config) => {
