@@ -86,6 +86,33 @@ cd backend
 npm start
 ```
 
+## Deployment Notes
+
+This app needs two live services in production:
+
+- a frontend deploy for `frontend/`
+- a separate Node.js backend deploy for `backend/`
+
+Netlify can host the frontend, but it does not replace the Express + Socket.io backend. If you deploy only the frontend, signup/login/messages will fail because the browser cannot talk to MongoDB or a live API.
+
+For a Netlify frontend deploy, set:
+
+```env
+VITE_API_URL=https://your-backend-domain/api
+VITE_SOCKET_URL=https://your-backend-domain
+```
+
+For the backend deploy, set:
+
+```env
+MONGODB_URI=your_mongodb_connection_string
+JWT_SECRET=replace_with_a_secure_secret
+CLIENT_URL=https://your-netlify-site.netlify.app
+NODE_ENV=production
+```
+
+After updating these values, rebuild and redeploy the frontend so the production bundle stops pointing at local development URLs.
+
 ## Quick Run Order
 
 1. Start MongoDB.

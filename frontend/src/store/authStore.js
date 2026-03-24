@@ -1,8 +1,14 @@
 import { create } from "zustand";
 import { io } from "socket.io-client";
-import api, { clearStoredToken, getErrorMessage, getStoredToken, setStoredToken } from "../lib/api";
-
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:5001";
+import {
+  clearStoredToken,
+  DEPLOY_CONFIG_ERROR,
+  getErrorMessage,
+  getStoredToken,
+  setStoredToken,
+  SOCKET_URL,
+} from "../lib/api";
+import api from "../lib/api";
 
 const useAuthStore = create((set, get) => ({
   authUser: null,
@@ -91,6 +97,11 @@ const useAuthStore = create((set, get) => ({
     const { authUser, socket } = get();
 
     if (!authUser?._id) {
+      return;
+    }
+
+    if (!SOCKET_URL) {
+      set({ authError: DEPLOY_CONFIG_ERROR, onlineUserIds: [] });
       return;
     }
 
