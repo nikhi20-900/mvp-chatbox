@@ -38,6 +38,11 @@ router.post("/signup", async (req, res) => {
     const normalizedEmail = email?.trim().toLowerCase();
     const normalizedFullName = fullName?.trim();
 
+    console.log("Signup request received", {
+      email: normalizedEmail,
+      hasName: Boolean(normalizedFullName),
+    });
+
     if (!normalizedFullName || !normalizedEmail || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
@@ -50,6 +55,11 @@ router.post("/signup", async (req, res) => {
 
     const existingUser = await User.findOne({ email: normalizedEmail });
 
+    console.log("Signup lookup completed", {
+      email: normalizedEmail,
+      exists: Boolean(existingUser),
+    });
+
     if (existingUser) {
       return res.status(400).json({ message: "Email already exists" });
     }
@@ -61,6 +71,11 @@ router.post("/signup", async (req, res) => {
       fullName: normalizedFullName,
       email: normalizedEmail,
       password: hashedPassword,
+    });
+
+    console.log("Signup user created", {
+      userId: newUser._id.toString(),
+      email: normalizedEmail,
     });
 
     const token = generateTokenAndSetCookie(newUser._id, res);
@@ -77,11 +92,18 @@ router.post("/login", async (req, res) => {
     const { email, password } = req.body;
     const normalizedEmail = email?.trim().toLowerCase();
 
+    console.log("Login request received", { email: normalizedEmail });
+
     if (!normalizedEmail || !password) {
       return res.status(400).json({ message: "Email and password are required" });
     }
 
     const user = await User.findOne({ email: normalizedEmail }).select("+password");
+
+    console.log("Login lookup completed", {
+      email: normalizedEmail,
+      found: Boolean(user),
+    });
 
     if (!user) {
       return res.status(400).json({ message: "Invalid credentials" });

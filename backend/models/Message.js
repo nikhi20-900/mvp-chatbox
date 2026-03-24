@@ -19,6 +19,7 @@ const messageSchema = new mongoose.Schema(
     },
   },
   {
+    bufferCommands: false,
     timestamps: { createdAt: true, updatedAt: false },
     toJSON: {
       transform: (_doc, ret) => {

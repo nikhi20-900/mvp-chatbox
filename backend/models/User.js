@@ -22,6 +22,7 @@ const userSchema = new mongoose.Schema(
     },
   },
   {
+    bufferCommands: false,
     timestamps: true,
     toJSON: {
       transform: (_doc, ret) => {

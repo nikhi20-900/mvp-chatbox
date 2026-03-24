@@ -17,6 +17,8 @@ if (missingEnvVars.length > 0) {
   throw new Error(`Missing required environment variables: ${missingEnvVars.join(", ")}`);
 }
 
+mongoose.set("bufferCommands", false);
+
 const allowedOriginPatterns = [
   /^http:\/\/127\.0\.0\.1:\d+$/,
   /^http:\/\/localhost:\d+$/,
@@ -58,6 +60,22 @@ app.get("/", (_req, res) => {
   res.status(200).json({ message: "Chat MVP backend is running" });
 });
 
+app.get("/health/db", async (_req, res) => {
+  try {
+    await mongoose.connection.db.admin().ping();
+    return res.status(200).json({
+      db: "connected",
+      readyState: mongoose.connection.readyState,
+    });
+  } catch (error) {
+    return res.status(503).json({
+      db: "unhealthy",
+      readyState: mongoose.connection.readyState,
+      message: error.message,
+    });
+  }
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api", messageRoutes);
 
@@ -66,6 +84,7 @@ const PORT = process.env.PORT || 5001;
 const startServer = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI, {
+      family: 4,
       serverSelectionTimeoutMS: 5000,
     });
 
