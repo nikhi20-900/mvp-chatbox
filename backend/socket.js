@@ -86,6 +86,26 @@ const initSocket = (server, isAllowedOrigin = () => true) => {
 
     emitOnlineUsers();
 
+    socket.on("typing:start", ({ toUserId }) => {
+      if (!toUserId) {
+        return;
+      }
+
+      socket.to(toUserId.toString()).emit("typing:start", {
+        fromUserId: userId,
+      });
+    });
+
+    socket.on("typing:stop", ({ toUserId }) => {
+      if (!toUserId) {
+        return;
+      }
+
+      socket.to(toUserId.toString()).emit("typing:stop", {
+        fromUserId: userId,
+      });
+    });
+
     socket.on("disconnect", () => {
       const activeSocketIds = userSocketMap.get(userId);
 

@@ -17,6 +17,14 @@ const messageSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    deliveredAt: {
+      type: Date,
+      default: null,
+    },
+    readAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     bufferCommands: false,
@@ -26,6 +34,8 @@ const messageSchema = new mongoose.Schema(
         ret._id = ret._id.toString();
         ret.senderId = ret.senderId.toString();
         ret.receiverId = ret.receiverId.toString();
+        ret.deliveredAt = ret.deliveredAt || null;
+        ret.readAt = ret.readAt || null;
         delete ret.__v;
         return ret;
       },

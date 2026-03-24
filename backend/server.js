@@ -55,7 +55,7 @@ const server = http.createServer(app);
 initSocket(server, isAllowedOrigin);
 
 app.set("trust proxy", 1);
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 app.use(cookieParser());

@@ -3,8 +3,10 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import protectRoute from "../middleware/auth.js";
+import { getIO } from "../socket.js";
 
 const router = express.Router();
+const MAX_AVATAR_LENGTH = 1_500_000;
 
 const getCookieOptions = () => {
   const isProduction = process.env.NODE_ENV === "production";
@@ -28,14 +30,22 @@ const generateTokenAndSetCookie = (userId, res) => {
   return token;
 };
 
-const formatAuthResponse = (user, token = null) => ({
-  _id: user._id.toString(),
-  fullName: user.fullName,
-  email: user.email,
-  createdAt: user.createdAt,
-  updatedAt: user.updatedAt,
-  token,
-});
+const formatAuthResponse = (user, token) => {
+  const response = {
+    _id: user._id.toString(),
+    fullName: user.fullName,
+    email: user.email,
+    avatar: user.avatar || "",
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+
+  if (token) {
+    response.token = token;
+  }
+
+  return response;
+};
 
 router.post("/signup", async (req, res) => {
   try {
@@ -150,6 +160,37 @@ router.get("/me", protectRoute, async (req, res) => {
   } catch (error) {
     console.error("Fetch current user failed:", error);
     return res.status(500).json({ message: "Failed to fetch user" });
+  }
+});
+
+router.patch("/profile", protectRoute, async (req, res) => {
+  try {
+    const fullName = req.body.fullName?.trim();
+    const avatar = typeof req.body.avatar === "string" ? req.body.avatar.trim() : "";
+
+    if (!fullName || fullName.length < 2) {
+      return res.status(400).json({ message: "Name must be at least 2 characters" });
+    }
+
+    if (avatar.length > MAX_AVATAR_LENGTH) {
+      return res.status(400).json({ message: "Avatar image is too large" });
+    }
+
+    req.user.fullName = fullName;
+    req.user.avatar = avatar;
+    await req.user.save();
+
+    const formattedUser = formatAuthResponse(req.user);
+    const io = getIO();
+
+    if (io) {
+      io.emit("user:updated", formattedUser);
+    }
+
+    return res.status(200).json(formattedUser);
+  } catch (error) {
+    console.error("Update profile failed:", error);
+    return res.status(500).json({ message: "Failed to update profile" });
   }
 });
 
