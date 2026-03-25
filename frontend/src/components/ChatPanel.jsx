@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useUIStore from "../store/uiStore";
+import AudioMessage from "./AudioMessage";
+import ImageMessage from "./ImageMessage";
+import LocationMessage from "./LocationMessage";
+import VoiceRecorder from "./VoiceRecorder";
+import ImageUpload from "./ImageUpload";
+import LocationShare from "./LocationShare";
 
 /* ── Helpers ──────────────────────────────────────────────── */
 
@@ -112,12 +118,16 @@ const ChatPanel = ({
   isSendingMessage,
   chatError,
   onSendMessage,
+  onSendAudio,
+  onSendImage,
+  onSendLocation,
   typingUsers = {},
   firstUnreadIndex = -1,
   onTypingChange,
   onBack,
 }) => {
   const [draft, setDraft] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
   const bottomRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -380,6 +390,25 @@ const ChatPanel = ({
               /* Message bubble */
               const msg = item.value;
               const isOwn = msg.senderId === authUser?._id;
+              const msgType = msg.messageType || "text";
+
+              /* ── Message content by type ── */
+              const renderContent = () => {
+                switch (msgType) {
+                  case "audio":
+                    return <AudioMessage audio={msg.audio} audioDuration={msg.audioDuration} isOwn={isOwn} />;
+                  case "image":
+                    return <ImageMessage image={msg.image} text={msg.text} isOwn={isOwn} />;
+                  case "location":
+                    return <LocationMessage location={msg.location} isOwn={isOwn} />;
+                  default:
+                    return (
+                      <p className="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed">
+                        {msg.text}
+                      </p>
+                    );
+                }
+              };
 
               return (
                 <div
@@ -395,9 +424,7 @@ const ChatPanel = ({
                       color: isOwn ? "var(--color-bubble-own-text)" : "var(--color-bubble-other-text)",
                     }}
                   >
-                    <p className="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed">
-                      {msg.text}
-                    </p>
+                    {renderContent()}
                     <div className={`mt-1 flex items-center gap-1.5 ${isOwn ? "justify-end" : ""}`}>
                       <span
                         className="text-[10px]"
@@ -491,52 +518,93 @@ const ChatPanel = ({
           </div>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="flex items-end gap-2.5">
-          <label className="sr-only" htmlFor="message-input">
-            Message
-          </label>
-          <textarea
-            id="message-input"
-            value={draft}
-            onChange={handleDraftChange}
-            onKeyDown={handleKeyDown}
-            placeholder={`Message ${selectedUser.fullName.split(" ")[0]}…`}
-            rows={1}
-            maxLength={500}
-            className="max-h-32 min-h-[44px] flex-1 resize-none rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-all theme-transition"
-            style={{
-              background: "var(--color-input-bg)",
-              borderColor: "var(--color-input-border)",
-              color: "var(--color-text-primary)",
+        {isRecording ? (
+          /* Voice recorder replaces the input row */
+          <VoiceRecorder
+            onSend={(data) => {
+              onSendAudio?.(data);
+              setIsRecording(false);
             }}
-            onFocus={(e) => {
-              e.target.style.borderColor = "var(--color-accent)";
-              e.target.style.boxShadow = "0 0 0 3px var(--color-accent-glow)";
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = "var(--color-input-border)";
-              e.target.style.boxShadow = "none";
-            }}
+            onCancel={() => setIsRecording(false)}
+            disabled={isSendingMessage}
+            showToast={showToast}
           />
-          <button
-            type="submit"
-            disabled={!draft.trim() || isSendingMessage}
-            className="flex h-[44px] items-center justify-center rounded-xl px-4 text-sm font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-            style={{
-              background: "var(--color-accent)",
-              color: "#fff",
-            }}
-          >
-            {isSendingMessage ? (
-              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 2L11 13" />
-                <path d="M22 2L15 22L11 13L2 9L22 2Z" />
-              </svg>
-            )}
-          </button>
-        </form>
+        ) : (
+          <form onSubmit={handleSubmit} className="flex items-end gap-2">
+            {/* Action buttons */}
+            <div className="flex items-center gap-0.5 pb-[2px]">
+              <button
+                type="button"
+                onClick={() => setIsRecording(true)}
+                disabled={isSendingMessage}
+                className="voice-action-btn"
+                style={{ color: "var(--color-text-secondary)" }}
+                title="Record voice message"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="22" />
+                </svg>
+              </button>
+              <ImageUpload
+                onSend={onSendImage}
+                disabled={isSendingMessage}
+                showToast={showToast}
+              />
+              <LocationShare
+                onSend={onSendLocation}
+                disabled={isSendingMessage}
+                showToast={showToast}
+              />
+            </div>
+
+            <label className="sr-only" htmlFor="message-input">
+              Message
+            </label>
+            <textarea
+              id="message-input"
+              value={draft}
+              onChange={handleDraftChange}
+              onKeyDown={handleKeyDown}
+              placeholder={`Message ${selectedUser.fullName.split(" ")[0]}…`}
+              rows={1}
+              maxLength={500}
+              className="max-h-32 min-h-[44px] flex-1 resize-none rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-all theme-transition"
+              style={{
+                background: "var(--color-input-bg)",
+                borderColor: "var(--color-input-border)",
+                color: "var(--color-text-primary)",
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = "var(--color-accent)";
+                e.target.style.boxShadow = "0 0 0 3px var(--color-accent-glow)";
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "var(--color-input-border)";
+                e.target.style.boxShadow = "none";
+              }}
+            />
+            <button
+              type="submit"
+              disabled={!draft.trim() || isSendingMessage}
+              className="flex h-[44px] items-center justify-center rounded-xl px-4 text-sm font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{
+                background: "var(--color-accent)",
+                color: "#fff",
+              }}
+            >
+              {isSendingMessage ? (
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 2L11 13" />
+                  <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+                </svg>
+              )}
+            </button>
+          </form>
+        )}
       </footer>
     </section>
   );

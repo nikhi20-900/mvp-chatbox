@@ -39,6 +39,7 @@ const updateUserPreview = (users, message, authUserId) =>
           _id: message._id,
           senderId: message.senderId,
           receiverId: message.receiverId,
+          messageType: message.messageType || "text",
           text: message.text,
           createdAt: message.createdAt,
         },
@@ -119,7 +120,7 @@ const useChatStore = create((set, get) => ({
   },
 
   /* ── Send ───────────────────────────────────────────────── */
-  sendMessage: async (text) => {
+  sendMessage: async (payload) => {
     const selectedUserId = get().selectedUser?._id;
 
     if (!selectedUserId) {
@@ -131,8 +132,14 @@ const useChatStore = create((set, get) => ({
     /* Stop typing indicator on send */
     get().emitTypingStop(selectedUserId);
 
+    /* Normalise: accept plain string for backwards-compat */
+    const body =
+      typeof payload === "string"
+        ? { messageType: "text", text: payload }
+        : { messageType: "text", ...payload };
+
     try {
-      const { data } = await api.post(`/messages/send/${selectedUserId}`, { text });
+      const { data } = await api.post(`/messages/send/${selectedUserId}`, body);
       const authUserId = useAuthStore.getState().authUser?._id;
 
       set((state) => ({

@@ -8,12 +8,15 @@ import { getIO, getOnlineUserIds, getReceiverSocketIds } from "../socket.js";
 const router = express.Router();
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
+const MAX_MEDIA_BASE64_LENGTH = 4 * 1024 * 1024; // ~4MB base64
+
 const formatMessagePreview = (message) =>
   message
     ? {
         _id: message._id.toString(),
         senderId: message.senderId.toString(),
         receiverId: message.receiverId.toString(),
+        messageType: message.messageType || "text",
         text: message.text,
         createdAt: message.createdAt,
         deliveredAt: message.deliveredAt || null,
@@ -212,7 +215,7 @@ router.get("/messages/:id", protectRoute, async (req, res) => {
 router.post("/messages/send/:id", protectRoute, async (req, res) => {
   try {
     const { id: receiverId } = req.params;
-    const { text } = req.body;
+    const { messageType = "text", text, image, audio, audioDuration, location } = req.body;
 
     if (!isValidObjectId(receiverId)) {
       return res.status(400).json({ message: "Invalid receiver id" });
@@ -222,8 +225,58 @@ router.post("/messages/send/:id", protectRoute, async (req, res) => {
       return res.status(400).json({ message: "You cannot message yourself" });
     }
 
-    if (!text || !text.trim()) {
-      return res.status(400).json({ message: "Message text is required" });
+    /* ── Per-type validation ────────────────────────── */
+    const messageData = {
+      senderId: req.userId,
+      receiverId,
+      messageType,
+      text: text ? text.trim() : "",
+    };
+
+    switch (messageType) {
+      case "text":
+        if (!text || !text.trim()) {
+          return res.status(400).json({ message: "Message text is required" });
+        }
+        break;
+
+      case "image":
+        if (!image || typeof image !== "string") {
+          return res.status(400).json({ message: "Image data is required" });
+        }
+        if (image.length > MAX_MEDIA_BASE64_LENGTH) {
+          return res.status(400).json({ message: "Image is too large (max 2 MB)" });
+        }
+        messageData.image = image;
+        break;
+
+      case "audio":
+        if (!audio || typeof audio !== "string") {
+          return res.status(400).json({ message: "Audio data is required" });
+        }
+        if (audio.length > MAX_MEDIA_BASE64_LENGTH) {
+          return res.status(400).json({ message: "Audio is too large" });
+        }
+        if (!audioDuration || typeof audioDuration !== "number" || audioDuration <= 0) {
+          return res.status(400).json({ message: "Audio duration is required" });
+        }
+        messageData.audio = audio;
+        messageData.audioDuration = audioDuration;
+        break;
+
+      case "location":
+        if (
+          !location ||
+          typeof location.lat !== "number" ||
+          typeof location.lng !== "number"
+        ) {
+          return res.status(400).json({ message: "Valid location coordinates are required" });
+        }
+        messageData.location = { lat: location.lat, lng: location.lng };
+        break;
+
+      default:
+        return res.status(400).json({ message: "Invalid message type" });
     }
 
     const receiver = await User.findById(receiverId);
@@ -234,12 +287,9 @@ router.post("/messages/send/:id", protectRoute, async (req, res) => {
 
     const receiverSocketIds = getReceiverSocketIds(receiverId);
     const deliveredAt = receiverSocketIds.length ? new Date() : null;
-    const newMessage = await Message.create({
-      senderId: req.userId,
-      receiverId,
-      text: text.trim(),
-      deliveredAt,
-    });
+    messageData.deliveredAt = deliveredAt;
+
+    const newMessage = await Message.create(messageData);
 
     const io = getIO();
 

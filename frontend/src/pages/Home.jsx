@@ -96,6 +96,22 @@ const Home = () => {
     [selectedUser?._id, emitTypingStart]
   );
 
+  /* Media send handlers */
+  const handleSendAudio = useCallback(
+    (data) => sendMessage({ messageType: "audio", ...data }),
+    [sendMessage]
+  );
+
+  const handleSendImage = useCallback(
+    (data) => sendMessage({ messageType: "image", ...data }),
+    [sendMessage]
+  );
+
+  const handleSendLocation = useCallback(
+    (data) => sendMessage({ messageType: "location", ...data }),
+    [sendMessage]
+  );
+
   return (
     <main
       className="min-h-screen px-3 py-3 sm:px-4 sm:py-4"
@@ -128,6 +144,9 @@ const Home = () => {
             isSendingMessage={isSendingMessage}
             chatError={chatError}
             onSendMessage={sendMessage}
+            onSendAudio={handleSendAudio}
+            onSendImage={handleSendImage}
+            onSendLocation={handleSendLocation}
             typingUsers={typingUsers}
             firstUnreadIndex={firstUnreadIndex}
             onTypingChange={handleTypingChange}

@@ -12,10 +12,31 @@ const messageSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    messageType: {
+      type: String,
+      enum: ["text", "image", "audio", "location"],
+      default: "text",
+    },
     text: {
       type: String,
-      required: true,
+      default: "",
       trim: true,
+    },
+    image: {
+      type: String,
+      default: "",
+    },
+    audio: {
+      type: String,
+      default: "",
+    },
+    audioDuration: {
+      type: Number,
+      default: 0,
+    },
+    location: {
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
     },
     deliveredAt: {
       type: Date,

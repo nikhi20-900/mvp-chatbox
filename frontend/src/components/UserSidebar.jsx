@@ -194,10 +194,31 @@ const UserSidebar = ({
             const isTyping = typingUsers[user._id];
             const previewPrefix =
               user.lastMessage?.senderId === authUser?._id ? "You: " : "";
+
+            /* Type-aware preview text */
+            let lastMsgPreview = "";
+            if (user.lastMessage) {
+              switch (user.lastMessage.messageType) {
+                case "audio":
+                  lastMsgPreview = "🎤 Voice message";
+                  break;
+                case "image":
+                  lastMsgPreview = user.lastMessage.text
+                    ? `📷 ${user.lastMessage.text}`
+                    : "📷 Photo";
+                  break;
+                case "location":
+                  lastMsgPreview = "📍 Location";
+                  break;
+                default:
+                  lastMsgPreview = user.lastMessage.text || "";
+              }
+            }
+
             const previewText = isTyping
               ? "typing…"
               : user.lastMessage
-              ? `${previewPrefix}${user.lastMessage.text}`
+              ? `${previewPrefix}${lastMsgPreview}`
               : "No messages yet";
 
             return (
