@@ -113,6 +113,7 @@ const ScrollButton = ({ onClick }) => (
 const ChatPanel = ({
   authUser,
   selectedUser,
+  selectedGroup,
   messages,
   isMessagesLoading,
   isSendingMessage,
@@ -121,6 +122,8 @@ const ChatPanel = ({
   onSendAudio,
   onSendImage,
   onSendLocation,
+  onCall,
+  allUsers = [],
   typingUsers = {},
   firstUnreadIndex = -1,
   onTypingChange,
@@ -132,6 +135,21 @@ const ChatPanel = ({
   const scrollContainerRef = useRef(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const showToast = useUIStore((state) => state.showToast);
+
+  /* Resolve entity name for header */
+  const chatEntity = selectedGroup
+    ? { name: selectedGroup.name, subtitle: `${selectedGroup.members?.length || 0} members` }
+    : selectedUser
+    ? { name: selectedUser.fullName, subtitle: null }
+    : null;
+
+  /* Build a username lookup map for group sender names */
+  const userMap = useMemo(() => {
+    const map = {};
+    allUsers.forEach((u) => { map[u._id] = u.fullName; });
+    if (authUser) map[authUser._id] = "You";
+    return map;
+  }, [allUsers, authUser]);
 
   const items = useMemo(() => {
     const grouped = groupMessages(messages);
@@ -151,7 +169,7 @@ const ChatPanel = ({
     return grouped;
   }, [messages, firstUnreadIndex]);
 
-  const isOtherUserTyping = selectedUser && typingUsers[selectedUser._id];
+  const isOtherUserTyping = selectedUser ? typingUsers[selectedUser._id] : false;
 
   /* Scroll tracking */
   const isNearBottom = useCallback(() => {
@@ -305,31 +323,77 @@ const ChatPanel = ({
         )}
 
         {/* Avatar */}
-        <div className="relative">
-          {selectedUser.avatar ? (
-            <img
-              src={selectedUser.avatar}
-              alt={selectedUser.fullName}
-              className="h-10 w-10 rounded-full object-cover"
-            />
-          ) : (
+        {selectedGroup ? (
+          /* Group header */
+          <>
             <div
-              className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold"
-              style={{ background: "var(--color-accent)", color: "#fff" }}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+              style={{ background: "var(--color-accent-glow)", color: "var(--color-accent)" }}
             >
-              {getInitials(selectedUser.fullName)}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
             </div>
-          )}
-        </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
+                {selectedGroup.name}
+              </p>
+              <p className="truncate text-xs" style={{ color: "var(--color-text-muted)" }}>
+                {selectedGroup.members?.length || 0} members
+              </p>
+            </div>
+          </>
+        ) : (
+          /* DM header */
+          <>
+            <div className="relative">
+              {selectedUser.avatar ? (
+                <img
+                  src={selectedUser.avatar}
+                  alt={selectedUser.fullName}
+                  className="h-10 w-10 rounded-full object-cover"
+                />
+              ) : (
+                <div
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold"
+                  style={{ background: "var(--color-accent)", color: "#fff" }}
+                >
+                  {getInitials(selectedUser.fullName)}
+                </div>
+              )}
+            </div>
 
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
-            {selectedUser.fullName}
-          </p>
-          <p className="truncate text-xs" style={{ color: "var(--color-text-muted)" }}>
-            {isOtherUserTyping ? "typing…" : selectedUser.email}
-          </p>
-        </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
+                {selectedUser.fullName}
+              </p>
+              <p className="truncate text-xs" style={{ color: "var(--color-text-muted)" }}>
+                {isOtherUserTyping ? "typing…" : selectedUser.email}
+              </p>
+            </div>
+
+            {/* Call button */}
+            {onCall && (
+              <button
+                type="button"
+                onClick={() => onCall(selectedUser._id, "audio")}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-all hover:opacity-80 active:scale-95 theme-transition"
+                style={{
+                  borderColor: "var(--color-border)",
+                  color: "var(--color-accent)",
+                }}
+                title="Start call"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                </svg>
+              </button>
+            )}
+          </>
+        )}
       </header>
 
       {/* Messages area */}
@@ -410,6 +474,11 @@ const ChatPanel = ({
                 }
               };
 
+              /* Sender name for group messages (non-own only) */
+              const senderLabel = selectedGroup && !isOwn
+                ? userMap[msg.senderId] || "Unknown"
+                : null;
+
               return (
                 <div
                   key={msg._id}
@@ -424,6 +493,14 @@ const ChatPanel = ({
                       color: isOwn ? "var(--color-bubble-own-text)" : "var(--color-bubble-other-text)",
                     }}
                   >
+                    {senderLabel && (
+                      <p
+                        className="text-[11px] font-semibold mb-0.5"
+                        style={{ color: "var(--color-accent)" }}
+                      >
+                        {senderLabel}
+                      </p>
+                    )}
                     {renderContent()}
                     <div className={`mt-1 flex items-center gap-1.5 ${isOwn ? "justify-end" : ""}`}>
                       <span

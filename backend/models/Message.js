@@ -10,7 +10,12 @@ const messageSchema = new mongoose.Schema(
     receiverId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      default: null,
+    },
+    groupId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Group",
+      default: null,
     },
     messageType: {
       type: String,
@@ -54,7 +59,8 @@ const messageSchema = new mongoose.Schema(
       transform: (_doc, ret) => {
         ret._id = ret._id.toString();
         ret.senderId = ret.senderId.toString();
-        ret.receiverId = ret.receiverId.toString();
+        ret.receiverId = ret.receiverId ? ret.receiverId.toString() : null;
+        ret.groupId = ret.groupId ? ret.groupId.toString() : null;
         ret.deliveredAt = ret.deliveredAt || null;
         ret.readAt = ret.readAt || null;
         delete ret.__v;
@@ -65,6 +71,7 @@ const messageSchema = new mongoose.Schema(
 );
 
 messageSchema.index({ senderId: 1, receiverId: 1, createdAt: 1 });
+messageSchema.index({ groupId: 1, createdAt: 1 });
 
 const Message = mongoose.model("Message", messageSchema);
 

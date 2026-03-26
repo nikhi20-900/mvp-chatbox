@@ -8,6 +8,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.js";
 import messageRoutes from "./routes/message.js";
+import groupRoutes from "./routes/group.js";
 import { initSocket } from "./socket.js";
 
 const requiredEnvVars = ["MONGODB_URI", "JWT_SECRET"];
@@ -82,6 +83,7 @@ app.get("/health/db", async (_req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api", messageRoutes);
+app.use("/api", groupRoutes);
 
 const PORT = process.env.PORT || 5001;
 

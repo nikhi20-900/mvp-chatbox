@@ -1,5 +1,6 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
+import Group from "./models/Group.js";
 
 const userSocketMap = new Map();
 let ioInstance = null;
@@ -76,7 +77,7 @@ const initSocket = (server, isAllowedOrigin = () => true) => {
     }
   });
 
-  ioInstance.on("connection", (socket) => {
+  ioInstance.on("connection", async (socket) => {
     const { userId } = socket.data;
     const existingSocketIds = userSocketMap.get(userId) ?? new Set();
 
@@ -84,8 +85,17 @@ const initSocket = (server, isAllowedOrigin = () => true) => {
     userSocketMap.set(userId, existingSocketIds);
     socket.join(userId);
 
+    /* ── Join all group rooms this user is a member of ──── */
+    try {
+      const groups = await Group.find({ members: userId }).select("_id").lean();
+      groups.forEach((g) => socket.join(`group:${g._id.toString()}`));
+    } catch (err) {
+      console.error("Failed to join group rooms:", err.message);
+    }
+
     emitOnlineUsers();
 
+    /* ── Typing indicators (DM) ──────────────────────── */
     socket.on("typing:start", ({ toUserId }) => {
       if (!toUserId) {
         return;
@@ -106,6 +116,60 @@ const initSocket = (server, isAllowedOrigin = () => true) => {
       });
     });
 
+    /* ── Group room management ───────────────────────── */
+    socket.on("group:join", ({ groupId }) => {
+      if (groupId) {
+        socket.join(`group:${groupId}`);
+      }
+    });
+
+    socket.on("group:leave", ({ groupId }) => {
+      if (groupId) {
+        socket.leave(`group:${groupId}`);
+      }
+    });
+
+    /* ── Calling signaling ───────────────────────────── */
+    socket.on("call:initiate", (data) => {
+      /* data: { toUserId, callType, callerName, callerAvatar } */
+      const targetSockets = getReceiverSocketIds(data.toUserId);
+      if (targetSockets.length === 0) {
+        socket.emit("call:unavailable", { toUserId: data.toUserId });
+        return;
+      }
+      socket.to(data.toUserId).emit("call:incoming", {
+        fromUserId: userId,
+        callType: data.callType,
+        callerName: data.callerName,
+        callerAvatar: data.callerAvatar,
+      });
+    });
+
+    socket.on("call:accept", ({ toUserId }) => {
+      socket.to(toUserId).emit("call:accepted", { fromUserId: userId });
+    });
+
+    socket.on("call:reject", ({ toUserId }) => {
+      socket.to(toUserId).emit("call:rejected", { fromUserId: userId });
+    });
+
+    socket.on("call:offer", ({ toUserId, offer }) => {
+      socket.to(toUserId).emit("call:offer", { fromUserId: userId, offer });
+    });
+
+    socket.on("call:answer", ({ toUserId, answer }) => {
+      socket.to(toUserId).emit("call:answer", { fromUserId: userId, answer });
+    });
+
+    socket.on("call:ice-candidate", ({ toUserId, candidate }) => {
+      socket.to(toUserId).emit("call:ice-candidate", { fromUserId: userId, candidate });
+    });
+
+    socket.on("call:end", ({ toUserId }) => {
+      socket.to(toUserId).emit("call:ended", { fromUserId: userId });
+    });
+
+    /* ── Disconnect ──────────────────────────────────── */
     socket.on("disconnect", () => {
       const activeSocketIds = userSocketMap.get(userId);
 

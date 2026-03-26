@@ -4,6 +4,7 @@ import Message from "../models/Message.js";
 import User from "../models/User.js";
 import protectRoute from "../middleware/auth.js";
 import { getIO, getOnlineUserIds, getReceiverSocketIds } from "../socket.js";
+import { uploadImage, uploadAudio } from "../lib/cloudinary.js";
 
 const router = express.Router();
 
@@ -247,7 +248,13 @@ router.post("/messages/send/:id", protectRoute, async (req, res) => {
         if (image.length > MAX_MEDIA_BASE64_LENGTH) {
           return res.status(400).json({ message: "Image is too large (max 2 MB)" });
         }
-        messageData.image = image;
+        try {
+          const imgResult = await uploadImage(image);
+          messageData.image = imgResult.url;
+        } catch (uploadErr) {
+          console.error("Image upload failed:", uploadErr.message);
+          return res.status(500).json({ message: "Image upload failed" });
+        }
         break;
 
       case "audio":
@@ -260,7 +267,13 @@ router.post("/messages/send/:id", protectRoute, async (req, res) => {
         if (!audioDuration || typeof audioDuration !== "number" || audioDuration <= 0) {
           return res.status(400).json({ message: "Audio duration is required" });
         }
-        messageData.audio = audio;
+        try {
+          const audioResult = await uploadAudio(audio);
+          messageData.audio = audioResult.url;
+        } catch (uploadErr) {
+          console.error("Audio upload failed:", uploadErr.message);
+          return res.status(500).json({ message: "Audio upload failed" });
+        }
         messageData.audioDuration = audioDuration;
         break;
 

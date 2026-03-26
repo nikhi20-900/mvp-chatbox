@@ -42,6 +42,10 @@ const UserSidebar = ({
   onLogout,
   onNavigateProfile,
   typingUsers = {},
+  groups = [],
+  selectedGroup,
+  onSelectGroup,
+  onNewGroup,
 }) => {
   const { theme, toggleTheme } = useUIStore();
 
@@ -308,6 +312,107 @@ const UserSidebar = ({
           >
             No users yet. Create another account in a second browser window to start chatting.
           </div>
+        )}
+
+        {/* ── Groups section ─────────────────────────────────── */}
+        <div className="flex items-center justify-between px-2 pt-4 pb-1">
+          <p
+            className="text-[11px] font-semibold uppercase tracking-wider"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            Groups
+          </p>
+          <button
+            type="button"
+            onClick={onNewGroup}
+            className="flex h-6 items-center gap-1 rounded-md px-2 text-[10px] font-semibold transition-all hover:opacity-80 active:scale-95"
+            style={{ background: "var(--color-accent-glow)", color: "var(--color-accent)" }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            New
+          </button>
+        </div>
+
+        {groups.length > 0 ? (
+          groups.map((group) => {
+            const isActive = selectedGroup?._id === group._id;
+            const lm = group.lastMessage;
+            let groupPreview = "No messages yet";
+            if (lm) {
+              switch (lm.messageType) {
+                case "audio":
+                  groupPreview = "🎤 Voice message";
+                  break;
+                case "image":
+                  groupPreview = "📷 Photo";
+                  break;
+                case "location":
+                  groupPreview = "📍 Location";
+                  break;
+                default:
+                  groupPreview = lm.text || "";
+              }
+            }
+
+            return (
+              <button
+                key={group._id}
+                type="button"
+                onClick={() => onSelectGroup?.(group)}
+                className={`flex w-full items-center gap-3 rounded-xl p-2.5 mb-0.5 text-left transition-all ${
+                  isActive ? "" : "hover:opacity-80"
+                }`}
+                style={{
+                  background: isActive ? "var(--color-accent-glow)" : "transparent",
+                  borderLeft: isActive ? "3px solid var(--color-accent)" : "3px solid transparent",
+                }}
+              >
+                {/* Group icon */}
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+                  style={{ background: "var(--color-accent-glow)", color: "var(--color-accent)" }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                </div>
+
+                {/* Text */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p
+                      className="truncate text-sm font-medium"
+                      style={{ color: "var(--color-text-primary)" }}
+                    >
+                      {group.name}
+                    </p>
+                    <span
+                      className="text-[10px] shrink-0"
+                      style={{ color: "var(--color-text-muted)" }}
+                    >
+                      {group.members?.length || 0} members
+                    </span>
+                  </div>
+                  <p
+                    className="truncate text-xs"
+                    style={{ color: "var(--color-text-muted)" }}
+                  >
+                    {groupPreview}
+                  </p>
+                </div>
+              </button>
+            );
+          })
+        ) : (
+          <p className="px-3 py-2 text-xs" style={{ color: "var(--color-text-muted)" }}>
+            No groups yet
+          </p>
         )}
       </div>
     </aside>
