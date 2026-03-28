@@ -263,7 +263,7 @@ const ChatPanel = ({
 
   /* ── Empty state (no user selected) ──────────────────────── */
 
-  if (!selectedUser) {
+  if (!selectedUser && !selectedGroup) {
     return (
       <section
         className="hidden flex-1 items-center justify-center rounded-2xl border theme-transition lg:flex"
