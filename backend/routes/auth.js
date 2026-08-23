@@ -102,7 +102,10 @@ router.post("/signup", async (req, res) => {
     return res.status(201).json(formatAuthResponse(newUser, token));
   } catch (error) {
     console.error("Signup failed:", error);
-    return res.status(500).json({ message: "Failed to sign up" });
+    if (error.code === 11000) {
+      return res.status(400).json({ message: "Email already exists" });
+    }
+    return res.status(500).json({ message: error.message || "Failed to sign up" });
   }
 });
 
@@ -145,7 +148,7 @@ router.post("/login", async (req, res) => {
     return res.status(200).json(formatAuthResponse(user, token));
   } catch (error) {
     console.error("Login failed:", error);
-    return res.status(500).json({ message: "Failed to log in" });
+    return res.status(500).json({ message: error.message || "Failed to log in" });
   }
 });
 

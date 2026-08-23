@@ -33,7 +33,18 @@ const isAllowedOrigin = (origin) => {
     return true;
   }
 
-  return allowedOrigins.includes(origin);
+  if (
+    allowedOrigins.includes(origin) ||
+    origin.includes("vercel.app") ||
+    origin.includes("github.io") ||
+    origin.includes("netlify.app") ||
+    origin.includes("localhost") ||
+    origin.includes("127.0.0.1")
+  ) {
+    return true;
+  }
+
+  return false;
 };
 
 const corsOptions = {
