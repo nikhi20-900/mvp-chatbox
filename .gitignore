@@ -10,3 +10,5 @@ frontend/.env
 
 # Local Netlify folder
 .netlify
+Screenshot*.png
+

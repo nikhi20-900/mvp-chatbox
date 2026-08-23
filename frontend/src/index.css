@@ -688,3 +688,34 @@ textarea {
     opacity: 0;
   }
 }
+
+/* ── Highlight & Command Palette Animations ─────────────────── */
+.msg-highlight-pulse {
+  animation: msg-pulse 1.8s ease-out;
+}
+
+@keyframes msg-pulse {
+  0% {
+    box-shadow: 0 0 0 4px var(--color-accent), 0 0 24px var(--color-accent-glow);
+    border-radius: 1rem;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.animate-scale-up {
+  animation: scale-up 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes scale-up {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+

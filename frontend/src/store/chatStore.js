@@ -51,11 +51,16 @@ const useChatStore = create((set, get) => ({
   users: [],
   selectedUser: null,
   messages: [],
+  replyMessage: null,
   isUsersLoading: false,
   isMessagesLoading: false,
   isSendingMessage: false,
   chatError: "",
   messageListener: null,
+
+  /* ── Reply state ───────────────────────────────────────── */
+  setReplyMessage: (message) => set({ replyMessage: message }),
+  clearReplyMessage: () => set({ replyMessage: null }),
 
   /* ── Typing state ──────────────────────────────────────── */
   typingUsers: {},
@@ -71,6 +76,7 @@ const useChatStore = create((set, get) => ({
     set({
       selectedUser: user,
       messages: [],
+      replyMessage: null,
       chatError: "",
       firstUnreadIndex: -1,
     }),
@@ -133,10 +139,13 @@ const useChatStore = create((set, get) => ({
     get().emitTypingStop(selectedUserId);
 
     /* Normalise: accept plain string for backwards-compat */
-    const body =
+    const baseBody =
       typeof payload === "string"
         ? { messageType: "text", text: payload }
         : { messageType: "text", ...payload };
+
+    const replyToId = get().replyMessage?._id || baseBody.replyTo;
+    const body = replyToId ? { ...baseBody, replyTo: replyToId } : baseBody;
 
     try {
       const { data } = await api.post(`/messages/send/${selectedUserId}`, body);
@@ -144,6 +153,7 @@ const useChatStore = create((set, get) => ({
 
       set((state) => ({
         messages: [...state.messages, data],
+        replyMessage: null,
         users: authUserId ? updateUserPreview(state.users, data, authUserId) : state.users,
         chatError: "",
       }));
@@ -155,6 +165,40 @@ const useChatStore = create((set, get) => ({
       return { success: false, message };
     } finally {
       set({ isSendingMessage: false });
+    }
+  },
+
+  /* ── Reactions ─────────────────────────────────────────── */
+  toggleReaction: async (messageId, emoji) => {
+    const authUserId = useAuthStore.getState().authUser?._id;
+    if (!authUserId || !messageId || !emoji) return;
+
+    /* Optimistic UI update */
+    set((state) => ({
+      messages: state.messages.map((msg) => {
+        if (msg._id !== messageId) return msg;
+        const currentReactions = Array.isArray(msg.reactions) ? [...msg.reactions] : [];
+        const idx = currentReactions.findIndex(
+          (r) => r.userId === authUserId && r.emoji === emoji
+        );
+        if (idx > -1) {
+          currentReactions.splice(idx, 1);
+        } else {
+          currentReactions.push({ userId: authUserId, emoji });
+        }
+        return { ...msg, reactions: currentReactions };
+      }),
+    }));
+
+    try {
+      const { data } = await api.post(`/messages/${messageId}/react`, { emoji });
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg._id === messageId ? { ...msg, reactions: data.reactions } : msg
+        ),
+      }));
+    } catch (error) {
+      console.error("Failed to toggle reaction:", error);
     }
   },
 
@@ -233,6 +277,7 @@ const useChatStore = create((set, get) => ({
       socket.off("typing:stop");
       socket.off("message:delivered");
       socket.off("message:read");
+      socket.off("message:reaction");
       socket.off("user:updated");
     }
 
@@ -297,6 +342,15 @@ const useChatStore = create((set, get) => ({
       });
     });
 
+    /* Reaction updates */
+    socket.on("message:reaction", ({ messageId, reactions }) => {
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg._id === messageId ? { ...msg, reactions } : msg
+        ),
+      }));
+    });
+
     /* Delivery & read status updates */
     socket.on("message:delivered", ({ messageIds, deliveredAt }) => {
       if (!messageIds?.length) {
@@ -358,6 +412,7 @@ const useChatStore = create((set, get) => ({
       socket.off("typing:stop");
       socket.off("message:delivered");
       socket.off("message:read");
+      socket.off("message:reaction");
       socket.off("user:updated");
     }
 
@@ -376,6 +431,7 @@ const useChatStore = create((set, get) => ({
       users: [],
       selectedUser: null,
       messages: [],
+      replyMessage: null,
       chatError: "",
       typingUsers: {},
       _typingTimer: null,

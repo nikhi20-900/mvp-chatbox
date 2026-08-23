@@ -46,6 +46,8 @@ const getInitials = (name = "") =>
     .map((part) => part[0]?.toUpperCase() || "")
     .join("");
 
+const EMOJI_PRESETS = ["👍", "❤️", "😂", "🔥", "🚀", "🎉"];
+
 /* ── Tick icons for read receipts ─────────────────────────── */
 
 const SingleTick = () => (
@@ -95,7 +97,7 @@ const ScrollButton = ({ onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className="absolute bottom-20 right-6 z-10 flex h-10 w-10 items-center justify-center rounded-full border shadow-lg theme-transition"
+    className="absolute bottom-20 right-6 z-10 flex h-10 w-10 items-center justify-center rounded-full border shadow-lg theme-transition transition-transform hover:scale-105 active:scale-95"
     style={{
       background: "var(--color-panel)",
       borderColor: "var(--color-border)",
@@ -108,6 +110,15 @@ const ScrollButton = ({ onClick }) => (
   </button>
 );
 
+/* ── Reply Icon ───────────────────────────────────────────── */
+
+const ReplyIcon = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 17 4 12 9 7" />
+    <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+  </svg>
+);
+
 /* ── Main ChatPanel ───────────────────────────────────────── */
 
 const ChatPanel = ({
@@ -115,6 +126,10 @@ const ChatPanel = ({
   selectedUser,
   selectedGroup,
   messages,
+  replyMessage,
+  onSetReply,
+  onClearReply,
+  onToggleReaction,
   isMessagesLoading,
   isSendingMessage,
   chatError,
@@ -131,17 +146,12 @@ const ChatPanel = ({
 }) => {
   const [draft, setDraft] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [activeHoverMsgId, setActiveHoverMsgId] = useState(null);
+  const [showEmojiPickerFor, setShowEmojiPickerFor] = useState(null);
   const bottomRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const showToast = useUIStore((state) => state.showToast);
-
-  /* Resolve entity name for header */
-  const chatEntity = selectedGroup
-    ? { name: selectedGroup.name, subtitle: `${selectedGroup.members?.length || 0} members` }
-    : selectedUser
-    ? { name: selectedUser.fullName, subtitle: null }
-    : null;
 
   /* Build a username lookup map for group sender names */
   const userMap = useMemo(() => {
@@ -158,7 +168,7 @@ const ChatPanel = ({
     if (firstUnreadIndex > 0) {
       const unreadMsg = messages[firstUnreadIndex];
       const insertIdx = grouped.findIndex(
-        (item) => item.type === "message" && item.value._id === unreadMsg._id
+        (item) => item.type === "message" && item.value._id === unreadMsg?._id
       );
 
       if (insertIdx > 0) {
@@ -174,16 +184,23 @@ const ChatPanel = ({
   /* Scroll tracking */
   const isNearBottom = useCallback(() => {
     const el = scrollContainerRef.current;
-
-    if (!el) {
-      return true;
-    }
-
+    if (!el) return true;
     return el.scrollHeight - el.scrollTop - el.clientHeight < 150;
   }, []);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  const jumpToMessage = useCallback((messageId) => {
+    const target = document.getElementById(`msg-${messageId}`);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.classList.add("msg-highlight-pulse");
+      setTimeout(() => {
+        target.classList.remove("msg-highlight-pulse");
+      }, 1800);
+    }
   }, []);
 
   useEffect(() => {
@@ -194,10 +211,7 @@ const ChatPanel = ({
 
   useEffect(() => {
     const el = scrollContainerRef.current;
-
-    if (!el) {
-      return;
-    }
+    if (!el) return;
 
     const handleScroll = () => {
       setShowScrollBtn(!isNearBottom());
@@ -209,13 +223,13 @@ const ChatPanel = ({
 
   useEffect(() => {
     setDraft("");
-  }, [selectedUser?._id]);
+    onClearReply?.();
+  }, [selectedUser?._id, selectedGroup?._id, onClearReply]);
 
   /* ── Input handlers ──────────────────────────────────────── */
 
   const handleDraftChange = (event) => {
     setDraft(event.target.value);
-
     if (onTypingChange) {
       onTypingChange(event.target.value.length > 0);
     }
@@ -235,9 +249,7 @@ const ChatPanel = ({
 
     const trimmedDraft = draft.trim();
 
-    if (isSendingMessage) {
-      return;
-    }
+    if (isSendingMessage) return;
 
     if (!trimmedDraft) {
       showToast({ type: "error", message: "Type a message before sending." });
@@ -261,7 +273,22 @@ const ChatPanel = ({
     }
   };
 
-  /* ── Empty state (no user selected) ──────────────────────── */
+  /* Helper to format reply preview text */
+  const getReplyPreviewText = (reply) => {
+    if (!reply) return "";
+    switch (reply.messageType) {
+      case "image":
+        return "📷 Photo" + (reply.text ? ` - ${reply.text}` : "");
+      case "audio":
+        return "🎤 Voice message";
+      case "location":
+        return "📍 Location";
+      default:
+        return reply.text || "";
+    }
+  };
+
+  /* ── Empty state (no user/group selected) ─────────────────── */
 
   if (!selectedUser && !selectedGroup) {
     return (
@@ -302,7 +329,7 @@ const ChatPanel = ({
     >
       {/* Header */}
       <header
-        className="flex items-center gap-3 border-b px-4 py-3 backdrop-blur-sm sm:px-5"
+        className="flex items-center gap-3 border-b px-4 py-3 backdrop-blur-sm sm:px-5 shrink-0"
         style={{
           background: "var(--color-header-bg)",
           borderColor: "var(--color-divider)",
@@ -322,7 +349,6 @@ const ChatPanel = ({
           </button>
         )}
 
-        {/* Avatar */}
         {selectedGroup ? (
           /* Group header */
           <>
@@ -350,7 +376,7 @@ const ChatPanel = ({
           /* DM header */
           <>
             <div className="relative">
-              {selectedUser.avatar ? (
+              {selectedUser?.avatar ? (
                 <img
                   src={selectedUser.avatar}
                   alt={selectedUser.fullName}
@@ -361,22 +387,22 @@ const ChatPanel = ({
                   className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold"
                   style={{ background: "var(--color-accent)", color: "#fff" }}
                 >
-                  {getInitials(selectedUser.fullName)}
+                  {getInitials(selectedUser?.fullName)}
                 </div>
               )}
             </div>
 
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
-                {selectedUser.fullName}
+                {selectedUser?.fullName}
               </p>
               <p className="truncate text-xs" style={{ color: "var(--color-text-muted)" }}>
-                {isOtherUserTyping ? "typing…" : selectedUser.email}
+                {isOtherUserTyping ? "typing…" : selectedUser?.email}
               </p>
             </div>
 
             {/* Call button */}
-            {onCall && (
+            {onCall && selectedUser && (
               <button
                 type="button"
                 onClick={() => onCall(selectedUser._id, "audio")}
@@ -417,7 +443,7 @@ const ChatPanel = ({
             ))}
           </div>
         ) : messages.length ? (
-          <div className="space-y-1">
+          <div className="space-y-2.5">
             {items.map((item, index) => {
               if (item.type === "date") {
                 return (
@@ -455,8 +481,29 @@ const ChatPanel = ({
               const msg = item.value;
               const isOwn = msg.senderId === authUser?._id;
               const msgType = msg.messageType || "text";
+              const isHovered = activeHoverMsgId === msg._id;
 
-              /* ── Message content by type ── */
+              /* Group reactions by emoji */
+              const reactionGroups = (msg.reactions || []).reduce((acc, r) => {
+                if (!acc[r.emoji]) {
+                  acc[r.emoji] = { emoji: r.emoji, count: 0, userIds: [], hasOwn: false };
+                }
+                acc[r.emoji].count += 1;
+                acc[r.emoji].userIds.push(r.userId);
+                if (r.userId === authUser?._id) {
+                  acc[r.emoji].hasOwn = true;
+                }
+                return acc;
+              }, {});
+
+              const reactionList = Object.values(reactionGroups);
+
+              /* Sender name for group messages (non-own only) */
+              const senderLabel = selectedGroup && !isOwn
+                ? userMap[msg.senderId] || "Unknown"
+                : null;
+
+              /* ── Render Content ── */
               const renderContent = () => {
                 switch (msgType) {
                   case "audio":
@@ -474,65 +521,181 @@ const ChatPanel = ({
                 }
               };
 
-              /* Sender name for group messages (non-own only) */
-              const senderLabel = selectedGroup && !isOwn
-                ? userMap[msg.senderId] || "Unknown"
-                : null;
-
               return (
                 <div
                   key={msg._id}
-                  className={`flex animate-msg-in ${isOwn ? "justify-end" : "justify-start"}`}
+                  id={`msg-${msg._id}`}
+                  className={`group relative flex items-end gap-1.5 animate-msg-in ${
+                    isOwn ? "justify-end" : "justify-start"
+                  }`}
+                  onMouseEnter={() => setActiveHoverMsgId(msg._id)}
+                  onMouseLeave={() => {
+                    setActiveHoverMsgId(null);
+                    setShowEmojiPickerFor(null);
+                  }}
                 >
+                  {/* Floating Action Bar on Hover */}
                   <div
-                    className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 sm:max-w-[65%] ${
-                      isOwn ? "rounded-br-md" : "rounded-bl-md"
-                    }`}
+                    className={`absolute -top-7 z-20 flex items-center gap-0.5 rounded-full border px-1 py-0.5 shadow-md backdrop-blur-md transition-all duration-150 ${
+                      isHovered ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1 pointer-events-none"
+                    } ${isOwn ? "right-2" : "left-2"}`}
                     style={{
-                      background: isOwn ? "var(--color-bubble-own)" : "var(--color-bubble-other)",
-                      color: isOwn ? "var(--color-bubble-own-text)" : "var(--color-bubble-other-text)",
+                      background: "var(--color-panel)",
+                      borderColor: "var(--color-border)",
                     }}
                   >
-                    {senderLabel && (
-                      <p
-                        className="text-[11px] font-semibold mb-0.5"
-                        style={{ color: "var(--color-accent)" }}
-                      >
-                        {senderLabel}
-                      </p>
-                    )}
-                    {renderContent()}
-                    <div className={`mt-1 flex items-center gap-1.5 ${isOwn ? "justify-end" : ""}`}>
-                      <span
-                        className="text-[10px]"
-                        style={{
-                          color: isOwn
-                            ? "var(--color-bubble-own-text)"
-                            : "var(--color-text-muted)",
-                          opacity: 0.7,
-                        }}
-                      >
-                        {formatTime(msg.createdAt)}
-                      </span>
+                    {/* Quick Emojis */}
+                    {EMOJI_PRESETS.map((emoji) => {
+                      const hasReacted = msg.reactions?.some(
+                        (r) => r.userId === authUser?._id && r.emoji === emoji
+                      );
 
-                      {/* Read receipt ticks (only on own messages) */}
-                      {isOwn && (
-                        <span
+                      return (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => onToggleReaction?.(msg._id, emoji)}
+                          className="flex h-6 w-6 items-center justify-center rounded-full text-xs transition-transform hover:scale-125 active:scale-95"
                           style={{
-                            color: "var(--color-bubble-own-text)",
-                            opacity: msg.readAt ? 1 : 0.6,
+                            background: hasReacted ? "var(--color-accent-glow)" : "transparent",
+                          }}
+                          title={`React with ${emoji}`}
+                        >
+                          {emoji}
+                        </button>
+                      );
+                    })}
+
+                    {/* Reply button */}
+                    <button
+                      type="button"
+                      onClick={() => onSetReply?.(msg)}
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-xs transition-transform hover:scale-110 active:scale-95 ml-0.5"
+                      style={{
+                        color: "var(--color-text-secondary)",
+                      }}
+                      title="Reply to message"
+                    >
+                      <ReplyIcon size={13} />
+                    </button>
+                  </div>
+
+                  {/* Bubble Container */}
+                  <div className="flex flex-col max-w-[80%] sm:max-w-[68%]">
+                    <div
+                      className={`relative rounded-2xl px-3.5 py-2.5 shadow-sm ${
+                        isOwn ? "rounded-br-md" : "rounded-bl-md"
+                      }`}
+                      style={{
+                        background: isOwn ? "var(--color-bubble-own)" : "var(--color-bubble-other)",
+                        color: isOwn ? "var(--color-bubble-own-text)" : "var(--color-bubble-other-text)",
+                      }}
+                    >
+                      {/* Sender label in group chat */}
+                      {senderLabel && (
+                        <p
+                          className="text-[11px] font-semibold mb-1"
+                          style={{ color: "var(--color-accent)" }}
+                        >
+                          {senderLabel}
+                        </p>
+                      )}
+
+                      {/* Quoted / Reply Preview block */}
+                      {msg.replyTo && (
+                        <div
+                          onClick={() => jumpToMessage(msg.replyTo._id)}
+                          className="mb-2 cursor-pointer rounded-xl p-2 text-left transition-opacity hover:opacity-85"
+                          style={{
+                            background: isOwn
+                              ? "rgba(0, 0, 0, 0.15)"
+                              : "var(--color-input-bg)",
+                            borderLeft: `3px solid ${isOwn ? "#ffffff" : "var(--color-accent)"}`,
+                          }}
+                          title="Click to jump to quoted message"
+                        >
+                          <div className="flex items-center gap-1 text-[11px] font-bold">
+                            <ReplyIcon size={11} />
+                            <span>
+                              {msg.replyTo.senderId === authUser?._id
+                                ? "You"
+                                : userMap[msg.replyTo.senderId] || "User"}
+                            </span>
+                          </div>
+                          <p className="line-clamp-2 text-xs opacity-90 mt-0.5">
+                            {getReplyPreviewText(msg.replyTo)}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Message Content */}
+                      {renderContent()}
+
+                      {/* Timestamp & Delivery Indicators */}
+                      <div className={`mt-1 flex items-center gap-1.5 ${isOwn ? "justify-end" : ""}`}>
+                        <span
+                          className="text-[10px]"
+                          style={{
+                            color: isOwn
+                              ? "var(--color-bubble-own-text)"
+                              : "var(--color-text-muted)",
+                            opacity: 0.75,
                           }}
                         >
-                          {msg.readAt ? (
-                            <DoubleTick read />
-                          ) : msg.deliveredAt ? (
-                            <DoubleTick read={false} />
-                          ) : (
-                            <SingleTick />
-                          )}
+                          {formatTime(msg.createdAt)}
                         </span>
-                      )}
+
+                        {isOwn && (
+                          <span
+                            style={{
+                              color: "var(--color-bubble-own-text)",
+                              opacity: msg.readAt ? 1 : 0.65,
+                            }}
+                          >
+                            {msg.readAt ? (
+                              <DoubleTick read />
+                            ) : msg.deliveredAt ? (
+                              <DoubleTick read={false} />
+                            ) : (
+                              <SingleTick />
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </div>
+
+                    {/* Reactions Display Bar */}
+                    {reactionList.length > 0 && (
+                      <div
+                        className={`flex flex-wrap items-center gap-1 mt-1 ${
+                          isOwn ? "justify-end" : "justify-start"
+                        }`}
+                      >
+                        {reactionList.map((rg) => (
+                          <button
+                            key={rg.emoji}
+                            type="button"
+                            onClick={() => onToggleReaction?.(msg._id, rg.emoji)}
+                            className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold shadow-xs transition-all hover:scale-105 active:scale-95"
+                            style={{
+                              background: rg.hasOwn
+                                ? "var(--color-accent-glow)"
+                                : "var(--color-panel)",
+                              borderColor: rg.hasOwn
+                                ? "var(--color-accent)"
+                                : "var(--color-border)",
+                              color: rg.hasOwn
+                                ? "var(--color-accent)"
+                                : "var(--color-text-primary)",
+                            }}
+                            title={`Reacted by ${rg.count} user${rg.count > 1 ? "s" : ""}`}
+                          >
+                            <span>{rg.emoji}</span>
+                            <span className="text-[10px] font-bold">{rg.count}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -564,8 +727,9 @@ const ChatPanel = ({
                 No messages yet
               </p>
               <p className="mt-2 text-sm leading-6" style={{ color: "var(--color-text-secondary)" }}>
-                Send the first message to {selectedUser.fullName.split(" ")[0]} and the
-                conversation will appear here.
+                {selectedGroup
+                  ? "Be the first to send a message to this group!"
+                  : `Send the first message to ${selectedUser?.fullName?.split(" ")[0]} and the conversation will appear here.`}
               </p>
             </div>
           </div>
@@ -576,7 +740,7 @@ const ChatPanel = ({
 
       {/* Input footer */}
       <footer
-        className="border-t px-4 py-3 sm:px-5"
+        className="border-t px-4 py-3 sm:px-5 shrink-0"
         style={{
           borderColor: "var(--color-divider)",
           background: "var(--color-panel)",
@@ -594,6 +758,49 @@ const ChatPanel = ({
             {chatError}
           </div>
         ) : null}
+
+        {/* Sticky Quoted Reply Preview Bar */}
+        {replyMessage && (
+          <div
+            className="mb-2 flex items-center justify-between gap-3 rounded-xl border p-2.5 animate-slide-up"
+            style={{
+              background: "var(--color-input-bg)",
+              borderColor: "var(--color-border)",
+              borderLeft: "4px solid var(--color-accent)",
+            }}
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "var(--color-accent)" }}>
+                <ReplyIcon size={12} />
+                <span>
+                  Replying to{" "}
+                  {replyMessage.senderId === authUser?._id
+                    ? "yourself"
+                    : userMap[replyMessage.senderId] || "user"}
+                </span>
+              </div>
+              <p
+                className="truncate text-xs mt-0.5"
+                style={{ color: "var(--color-text-muted)" }}
+              >
+                {getReplyPreviewText(replyMessage)}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClearReply}
+              className="flex h-6 w-6 items-center justify-center rounded-lg hover:opacity-70"
+              style={{ color: "var(--color-text-muted)" }}
+              title="Cancel reply"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        )}
 
         {isRecording ? (
           /* Voice recorder replaces the input row */
@@ -644,7 +851,11 @@ const ChatPanel = ({
               value={draft}
               onChange={handleDraftChange}
               onKeyDown={handleKeyDown}
-              placeholder={`Message ${selectedUser.fullName.split(" ")[0]}…`}
+              placeholder={
+                selectedGroup
+                  ? `Message ${selectedGroup.name}…`
+                  : `Message ${selectedUser?.fullName?.split(" ")[0]}…`
+              }
               rows={1}
               maxLength={500}
               className="max-h-32 min-h-[44px] flex-1 resize-none rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-all theme-transition"

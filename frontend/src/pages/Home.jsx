@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import ChatPanel from "../components/ChatPanel";
 import UserSidebar from "../components/UserSidebar";
 import GroupModal from "../components/GroupModal";
+import CommandPalette from "../components/CommandPalette";
 import CallUI from "../components/CallUI";
 import useAuthStore from "../store/authStore";
 import useChatStore from "../store/chatStore";
@@ -13,11 +14,16 @@ import useUIStore from "../store/uiStore";
 const Home = () => {
   const navigate = useNavigate();
   const showToast = useUIStore((state) => state.showToast);
+  const { toggleTheme } = useUIStore();
   const { authUser, logout, isLoggingOut, socket, onlineUserIds } = useAuthStore();
   const {
     users,
     selectedUser,
     messages,
+    replyMessage,
+    setReplyMessage,
+    clearReplyMessage,
+    toggleReaction,
     isUsersLoading,
     isMessagesLoading,
     isSendingMessage,
@@ -40,6 +46,10 @@ const Home = () => {
     groups,
     selectedGroup,
     groupMessages,
+    replyMessage: groupReplyMessage,
+    setGroupReplyMessage,
+    clearGroupReplyMessage,
+    toggleGroupReaction,
     isGroupMessagesLoading,
     isSendingGroupMessage,
     groupError,
@@ -59,6 +69,7 @@ const Home = () => {
 
   const [showSidebar, setShowSidebar] = useState(true);
   const [showGroupModal, setShowGroupModal] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
 
   /* ── Init ───────────────────────────────────────────────── */
 
@@ -90,6 +101,19 @@ const Home = () => {
     subscribeToCallEvents,
     unsubscribeFromCallEvents,
   ]);
+
+  /* Global keyboard shortcut for Command Palette (Cmd+K / Ctrl+K) */
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setShowCommandPalette((prev) => !prev);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   /* ── DM effects ─────────────────────────────────────────── */
 
@@ -155,8 +179,6 @@ const Home = () => {
   }, [logout, resetChat, resetGroups]);
 
   /* Typing */
-  const typingTimerRef = useRef(null);
-
   const handleTypingChange = useCallback(
     (isTyping) => {
       if (!selectedUser?._id) return;
@@ -244,6 +266,7 @@ const Home = () => {
             onSelectUser={handleSelectUser}
             onLogout={handleLogout}
             onNavigateProfile={() => navigate("/profile")}
+            onOpenCommandPalette={() => setShowCommandPalette(true)}
             typingUsers={typingUsers}
             groups={groups}
             selectedGroup={selectedGroup}
@@ -259,6 +282,16 @@ const Home = () => {
             selectedUser={isGroupMode ? null : selectedUser}
             selectedGroup={isGroupMode ? selectedGroup : null}
             messages={isGroupMode ? groupMessages : messages}
+            replyMessage={isGroupMode ? groupReplyMessage : replyMessage}
+            onSetReply={isGroupMode ? setGroupReplyMessage : setReplyMessage}
+            onClearReply={isGroupMode ? clearGroupReplyMessage : clearReplyMessage}
+            onToggleReaction={
+              isGroupMode
+                ? (msgId, emoji) =>
+                    selectedGroup?._id &&
+                    toggleGroupReaction(selectedGroup._id, msgId, emoji)
+                : toggleReaction
+            }
             isMessagesLoading={isGroupMode ? isGroupMessagesLoading : isMessagesLoading}
             isSendingMessage={isGroupMode ? isSendingGroupMessage : isSendingMessage}
             chatError={isGroupMode ? groupError : chatError}
@@ -280,11 +313,26 @@ const Home = () => {
       {showGroupModal && (
         <GroupModal
           users={users}
+          onlineUserIds={onlineUserIds}
           onClose={() => setShowGroupModal(false)}
           onCreate={handleCreateGroup}
           isCreating={isCreatingGroup}
         />
       )}
+
+      {/* Command Palette */}
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        users={users}
+        groups={groups}
+        onSelectUser={handleSelectUser}
+        onSelectGroup={handleSelectGroup}
+        onNewGroup={() => setShowGroupModal(true)}
+        onToggleTheme={toggleTheme}
+        onNavigateProfile={() => navigate("/profile")}
+        onLogout={handleLogout}
+      />
 
       {/* Call UI overlay */}
       <CallUI />

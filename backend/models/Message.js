@@ -1,5 +1,21 @@
 import mongoose from "mongoose";
 
+const reactionSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    emoji: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+  },
+  { _id: false }
+);
+
 const messageSchema = new mongoose.Schema(
   {
     senderId: {
@@ -43,6 +59,15 @@ const messageSchema = new mongoose.Schema(
       lat: { type: Number, default: null },
       lng: { type: Number, default: null },
     },
+    replyTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
+    reactions: {
+      type: [reactionSchema],
+      default: [],
+    },
     deliveredAt: {
       type: Date,
       default: null,
@@ -63,6 +88,14 @@ const messageSchema = new mongoose.Schema(
         ret.groupId = ret.groupId ? ret.groupId.toString() : null;
         ret.deliveredAt = ret.deliveredAt || null;
         ret.readAt = ret.readAt || null;
+        if (ret.reactions) {
+          ret.reactions = ret.reactions.map((r) => ({
+            userId: r.userId.toString(),
+            emoji: r.emoji,
+          }));
+        } else {
+          ret.reactions = [];
+        }
         delete ret.__v;
         return ret;
       },

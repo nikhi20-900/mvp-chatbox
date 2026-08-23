@@ -6,11 +6,17 @@ const useGroupStore = create((set, get) => ({
   groups: [],
   selectedGroup: null,
   groupMessages: [],
+  replyMessage: null,
   isGroupsLoading: false,
   isGroupMessagesLoading: false,
   isSendingGroupMessage: false,
   isCreatingGroup: false,
   groupError: "",
+
+  /* ── Reply state ────────────────────────────────────────── */
+
+  setGroupReplyMessage: (message) => set({ replyMessage: message }),
+  clearGroupReplyMessage: () => set({ replyMessage: null }),
 
   /* ── Fetch groups ───────────────────────────────────────── */
 
@@ -49,7 +55,12 @@ const useGroupStore = create((set, get) => ({
   /* ── Select group ───────────────────────────────────────── */
 
   setSelectedGroup: (group) => {
-    set({ selectedGroup: group, groupMessages: [], groupError: "" });
+    set({
+      selectedGroup: group,
+      groupMessages: [],
+      replyMessage: null,
+      groupError: "",
+    });
   },
 
   /* ── Fetch group messages ───────────────────────────────── */
@@ -74,16 +85,20 @@ const useGroupStore = create((set, get) => ({
 
     set({ isSendingGroupMessage: true });
 
-    const body =
+    const baseBody =
       typeof payload === "string"
         ? { messageType: "text", text: payload }
         : { messageType: "text", ...payload };
+
+    const replyToId = get().replyMessage?._id || baseBody.replyTo;
+    const body = replyToId ? { ...baseBody, replyTo: replyToId } : baseBody;
 
     try {
       const { data } = await api.post(`/groups/${groupId}/send`, body);
 
       set((state) => ({
         groupMessages: [...state.groupMessages, data],
+        replyMessage: null,
         groups: state.groups.map((g) =>
           g._id === groupId
             ? {
@@ -108,6 +123,44 @@ const useGroupStore = create((set, get) => ({
       return { success: false, message };
     } finally {
       set({ isSendingGroupMessage: false });
+    }
+  },
+
+  /* ── React to group message ─────────────────────────────── */
+
+  toggleGroupReaction: async (groupId, messageId, emoji) => {
+    const authUserId = useAuthStore.getState().authUser?._id;
+    if (!authUserId || !groupId || !messageId || !emoji) return;
+
+    /* Optimistic UI update */
+    set((state) => ({
+      groupMessages: state.groupMessages.map((msg) => {
+        if (msg._id !== messageId) return msg;
+        const currentReactions = Array.isArray(msg.reactions) ? [...msg.reactions] : [];
+        const idx = currentReactions.findIndex(
+          (r) => r.userId === authUserId && r.emoji === emoji
+        );
+        if (idx > -1) {
+          currentReactions.splice(idx, 1);
+        } else {
+          currentReactions.push({ userId: authUserId, emoji });
+        }
+        return { ...msg, reactions: currentReactions };
+      }),
+    }));
+
+    try {
+      const { data } = await api.post(
+        `/groups/${groupId}/messages/${messageId}/react`,
+        { emoji }
+      );
+      set((state) => ({
+        groupMessages: state.groupMessages.map((msg) =>
+          msg._id === messageId ? { ...msg, reactions: data.reactions } : msg
+        ),
+      }));
+    } catch (error) {
+      console.error("Failed to toggle group reaction:", error);
     }
   },
 
@@ -164,6 +217,16 @@ const useGroupStore = create((set, get) => ({
       }));
     });
 
+    socket.on("group:message:reaction", ({ groupId, messageId, reactions }) => {
+      if (get().selectedGroup?._id === groupId) {
+        set((s) => ({
+          groupMessages: s.groupMessages.map((msg) =>
+            msg._id === messageId ? { ...msg, reactions } : msg
+          ),
+        }));
+      }
+    });
+
     socket.on("group:created", (group) => {
       set((s) => ({
         groups: [group, ...s.groups.filter((g) => g._id !== group._id)],
@@ -197,6 +260,7 @@ const useGroupStore = create((set, get) => ({
     if (!socket) return;
 
     socket.off("group:newMessage");
+    socket.off("group:message:reaction");
     socket.off("group:created");
     socket.off("group:updated");
     socket.off("group:removed");
@@ -209,6 +273,7 @@ const useGroupStore = create((set, get) => ({
       groups: [],
       selectedGroup: null,
       groupMessages: [],
+      replyMessage: null,
       groupError: "",
     });
   },

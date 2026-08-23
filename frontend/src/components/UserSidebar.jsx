@@ -46,6 +46,7 @@ const UserSidebar = ({
   selectedGroup,
   onSelectGroup,
   onNewGroup,
+  onOpenCommandPalette,
 }) => {
   const { theme, toggleTheme } = useUIStore();
 
@@ -154,8 +155,39 @@ const UserSidebar = ({
         </div>
       </div>
 
+      {/* Quick Command Palette Button */}
+      <div className="px-3 pt-3 pb-1">
+        <button
+          type="button"
+          onClick={onOpenCommandPalette}
+          className="flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs transition-all hover:opacity-90 active:scale-[0.99]"
+          style={{
+            background: "var(--color-input-bg)",
+            borderColor: "var(--color-border)",
+            color: "var(--color-text-muted)",
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <span>Search or jump to…</span>
+          </div>
+          <kbd
+            className="rounded px-1.5 py-0.5 text-[10px] font-semibold border"
+            style={{
+              background: "var(--color-panel)",
+              borderColor: "var(--color-border)",
+            }}
+          >
+            ⌘K
+          </kbd>
+        </button>
+      </div>
+
       {/* ── Section label ────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-1">
+      <div className="flex items-center justify-between px-4 pt-2 pb-1">
         <p
           className="text-[11px] font-semibold uppercase tracking-wider"
           style={{ color: "var(--color-text-muted)" }}

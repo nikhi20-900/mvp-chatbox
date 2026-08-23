@@ -122,6 +122,7 @@ router.get("/groups/:id/messages", protectRoute, async (req, res) => {
     }
 
     const messages = await Message.find({ groupId })
+      .populate("replyTo", "_id senderId messageType text image audio location createdAt")
       .sort({ createdAt: 1 })
       .lean();
 
@@ -131,6 +132,22 @@ router.get("/groups/:id/messages", protectRoute, async (req, res) => {
       senderId: msg.senderId.toString(),
       groupId: msg.groupId.toString(),
       receiverId: null,
+      reactions: Array.isArray(msg.reactions)
+        ? msg.reactions.map((r) => ({
+            userId: r.userId.toString(),
+            emoji: r.emoji,
+          }))
+        : [],
+      replyTo: msg.replyTo
+        ? {
+            _id: msg.replyTo._id.toString(),
+            senderId: msg.replyTo.senderId.toString(),
+            messageType: msg.replyTo.messageType || "text",
+            text: msg.replyTo.text || "",
+            image: msg.replyTo.image || "",
+            createdAt: msg.replyTo.createdAt,
+          }
+        : null,
     }));
 
     return res.status(200).json(formatted);
@@ -145,7 +162,15 @@ router.get("/groups/:id/messages", protectRoute, async (req, res) => {
 router.post("/groups/:id/send", protectRoute, async (req, res) => {
   try {
     const { id: groupId } = req.params;
-    const { messageType = "text", text, image, audio, audioDuration, location } = req.body;
+    const {
+      messageType = "text",
+      text,
+      image,
+      audio,
+      audioDuration,
+      location,
+      replyTo,
+    } = req.body;
 
     if (!isValidObjectId(groupId)) {
       return res.status(400).json({ message: "Invalid group id" });
@@ -166,6 +191,10 @@ router.post("/groups/:id/send", protectRoute, async (req, res) => {
       messageType,
       text: text ? text.trim() : "",
     };
+
+    if (replyTo && isValidObjectId(replyTo)) {
+      messageData.replyTo = replyTo;
+    }
 
     switch (messageType) {
       case "text":
@@ -225,7 +254,14 @@ router.post("/groups/:id/send", protectRoute, async (req, res) => {
         return res.status(400).json({ message: "Invalid message type" });
     }
 
-    const newMessage = await Message.create(messageData);
+    let newMessage = await Message.create(messageData);
+
+    if (newMessage.replyTo) {
+      newMessage = await newMessage.populate(
+        "replyTo",
+        "_id senderId messageType text image audio location createdAt"
+      );
+    }
 
     /* Broadcast to all group members via socket room */
     const io = getIO();
@@ -240,6 +276,75 @@ router.post("/groups/:id/send", protectRoute, async (req, res) => {
   } catch (error) {
     console.error("Send group message failed:", error);
     return res.status(500).json({ message: "Failed to send message" });
+  }
+});
+
+/* ── React to group message ─────────────────────────────────── */
+
+router.post("/groups/:groupId/messages/:messageId/react", protectRoute, async (req, res) => {
+  try {
+    const { groupId, messageId } = req.params;
+    const { emoji } = req.body;
+
+    if (!isValidObjectId(groupId) || !isValidObjectId(messageId)) {
+      return res.status(400).json({ message: "Invalid id" });
+    }
+
+    if (!emoji || typeof emoji !== "string") {
+      return res.status(400).json({ message: "Emoji is required" });
+    }
+
+    const group = await Group.findById(groupId);
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
+    }
+
+    if (!group.members.map((m) => m.toString()).includes(req.userId)) {
+      return res.status(403).json({ message: "Not a member of this group" });
+    }
+
+    const message = await Message.findOne({ _id: messageId, groupId });
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    if (!Array.isArray(message.reactions)) {
+      message.reactions = [];
+    }
+
+    const existingIndex = message.reactions.findIndex(
+      (r) => r.userId.toString() === req.userId && r.emoji === emoji
+    );
+
+    if (existingIndex > -1) {
+      message.reactions.splice(existingIndex, 1);
+    } else {
+      message.reactions.push({ userId: req.userId, emoji });
+    }
+
+    await message.save();
+
+    const formattedReactions = message.reactions.map((r) => ({
+      userId: r.userId.toString(),
+      emoji: r.emoji,
+    }));
+
+    const io = getIO();
+    if (io) {
+      io.to(`group:${groupId}`).emit("group:message:reaction", {
+        groupId,
+        messageId: message._id.toString(),
+        reactions: formattedReactions,
+      });
+    }
+
+    return res.status(200).json({
+      messageId: message._id.toString(),
+      reactions: formattedReactions,
+    });
+  } catch (error) {
+    console.error("React to group message failed:", error);
+    return res.status(500).json({ message: "Failed to react to message" });
   }
 });
 

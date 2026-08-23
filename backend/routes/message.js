@@ -190,7 +190,9 @@ router.get("/messages/:id", protectRoute, async (req, res) => {
         { senderId: req.userId, receiverId: chatUserId },
         { senderId: chatUserId, receiverId: req.userId },
       ],
-    }).sort({ createdAt: 1 });
+    })
+      .populate("replyTo", "_id senderId messageType text image audio location createdAt")
+      .sort({ createdAt: 1 });
 
     if (stateUpdate.deliveredIds.length && stateUpdate.deliveredAt) {
       emitMessageStatus(io, chatUserId, "message:delivered", {
@@ -216,7 +218,15 @@ router.get("/messages/:id", protectRoute, async (req, res) => {
 router.post("/messages/send/:id", protectRoute, async (req, res) => {
   try {
     const { id: receiverId } = req.params;
-    const { messageType = "text", text, image, audio, audioDuration, location } = req.body;
+    const {
+      messageType = "text",
+      text,
+      image,
+      audio,
+      audioDuration,
+      location,
+      replyTo,
+    } = req.body;
 
     if (!isValidObjectId(receiverId)) {
       return res.status(400).json({ message: "Invalid receiver id" });
@@ -233,6 +243,10 @@ router.post("/messages/send/:id", protectRoute, async (req, res) => {
       messageType,
       text: text ? text.trim() : "",
     };
+
+    if (replyTo && isValidObjectId(replyTo)) {
+      messageData.replyTo = replyTo;
+    }
 
     switch (messageType) {
       case "text":
@@ -302,7 +316,14 @@ router.post("/messages/send/:id", protectRoute, async (req, res) => {
     const deliveredAt = receiverSocketIds.length ? new Date() : null;
     messageData.deliveredAt = deliveredAt;
 
-    const newMessage = await Message.create(messageData);
+    let newMessage = await Message.create(messageData);
+
+    if (newMessage.replyTo) {
+      newMessage = await newMessage.populate(
+        "replyTo",
+        "_id senderId messageType text image audio location createdAt"
+      );
+    }
 
     const io = getIO();
 
@@ -368,6 +389,76 @@ router.post("/messages/read/:id", protectRoute, async (req, res) => {
   } catch (error) {
     console.error("Mark messages as read failed:", error);
     return res.status(500).json({ message: "Failed to mark messages as read" });
+  }
+});
+
+router.post("/messages/:id/react", protectRoute, async (req, res) => {
+  try {
+    const { id: messageId } = req.params;
+    const { emoji } = req.body;
+
+    if (!isValidObjectId(messageId)) {
+      return res.status(400).json({ message: "Invalid message id" });
+    }
+
+    if (!emoji || typeof emoji !== "string") {
+      return res.status(400).json({ message: "Emoji is required" });
+    }
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    const isParticipant =
+      message.senderId.toString() === req.userId ||
+      (message.receiverId && message.receiverId.toString() === req.userId);
+
+    if (!isParticipant) {
+      return res.status(403).json({ message: "Not authorized to react to this message" });
+    }
+
+    if (!Array.isArray(message.reactions)) {
+      message.reactions = [];
+    }
+
+    const existingIndex = message.reactions.findIndex(
+      (r) => r.userId.toString() === req.userId && r.emoji === emoji
+    );
+
+    if (existingIndex > -1) {
+      message.reactions.splice(existingIndex, 1);
+    } else {
+      message.reactions.push({ userId: req.userId, emoji });
+    }
+
+    await message.save();
+
+    const formattedReactions = message.reactions.map((r) => ({
+      userId: r.userId.toString(),
+      emoji: r.emoji,
+    }));
+
+    const io = getIO();
+    if (io) {
+      const payload = {
+        messageId: message._id.toString(),
+        reactions: formattedReactions,
+      };
+
+      if (message.receiverId) {
+        io.to(message.receiverId.toString()).emit("message:reaction", payload);
+      }
+      io.to(message.senderId.toString()).emit("message:reaction", payload);
+    }
+
+    return res.status(200).json({
+      messageId: message._id.toString(),
+      reactions: formattedReactions,
+    });
+  } catch (error) {
+    console.error("React to message failed:", error);
+    return res.status(500).json({ message: "Failed to react to message" });
   }
 });
 
