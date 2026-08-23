@@ -10,20 +10,26 @@ import { uploadImage, uploadAudio } from "../lib/cloudinary.js";
 const router = express.Router();
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
-const MAX_MEDIA_BASE64_LENGTH = 4 * 1024 * 1024;
+const MAX_MEDIA_BASE64_LENGTH = 2 * 1024 * 1024; // 2MB base64 cap
+const MAX_GROUP_MEMBERS = 100;
 
 /* ── Create group ──────────────────────────────────────────── */
 
 router.post("/groups", protectRoute, async (req, res) => {
   try {
     const { name, members: memberIds } = req.body;
+    const trimmedName = name?.trim();
 
-    if (!name || !name.trim()) {
-      return res.status(400).json({ message: "Group name is required" });
+    if (!trimmedName || trimmedName.length < 2 || trimmedName.length > 50) {
+      return res.status(400).json({ message: "Group name must be between 2 and 50 characters" });
     }
 
     if (!Array.isArray(memberIds) || memberIds.length < 1) {
       return res.status(400).json({ message: "At least one other member is required" });
+    }
+
+    if (memberIds.length > MAX_GROUP_MEMBERS) {
+      return res.status(400).json({ message: `Groups cannot exceed ${MAX_GROUP_MEMBERS} members` });
     }
 
     if (memberIds.some((id) => !isValidObjectId(id))) {
@@ -243,9 +249,13 @@ router.post("/groups/:id/send", protectRoute, async (req, res) => {
         if (
           !location ||
           typeof location.lat !== "number" ||
-          typeof location.lng !== "number"
+          typeof location.lng !== "number" ||
+          location.lat < -90 ||
+          location.lat > 90 ||
+          location.lng < -180 ||
+          location.lng > 180
         ) {
-          return res.status(400).json({ message: "Valid location coordinates are required" });
+          return res.status(400).json({ message: "Valid latitude (-90..90) and longitude (-180..180) are required" });
         }
         messageData.location = { lat: location.lat, lng: location.lng };
         break;
@@ -290,8 +300,8 @@ router.post("/groups/:groupId/messages/:messageId/react", protectRoute, async (r
       return res.status(400).json({ message: "Invalid id" });
     }
 
-    if (!emoji || typeof emoji !== "string") {
-      return res.status(400).json({ message: "Emoji is required" });
+    if (!emoji || typeof emoji !== "string" || emoji.trim().length === 0 || emoji.length > 10) {
+      return res.status(400).json({ message: "A valid emoji is required (max 10 characters)" });
     }
 
     const group = await Group.findById(groupId);

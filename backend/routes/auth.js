@@ -62,8 +62,17 @@ router.post("/signup", async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    if (password.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    if (normalizedFullName.length < 2 || normalizedFullName.length > 50) {
+      return res.status(400).json({ message: "Full name must be between 2 and 50 characters" });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail) || normalizedEmail.length > 254) {
+      return res.status(400).json({ message: "Please provide a valid email address" });
+    }
+
+    if (password.length < 6 || password.length > 128) {
+      return res.status(400).json({ message: "Password must be between 6 and 128 characters" });
     }
 
     console.log("Checking existing user", { email: normalizedEmail });
