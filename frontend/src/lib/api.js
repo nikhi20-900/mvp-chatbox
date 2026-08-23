@@ -8,8 +8,8 @@ const LOCAL_API_URL = "http://127.0.0.1:5001/api";
 const LOCAL_SOCKET_URL = "http://127.0.0.1:5001";
 const isDev = import.meta.env.DEV;
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || (isDev ? LOCAL_API_URL : "");
-export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (isDev ? LOCAL_SOCKET_URL : "");
+export const API_BASE_URL = import.meta.env.VITE_API_URL || LOCAL_API_URL;
+export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || LOCAL_SOCKET_URL;
 
 export const getStoredToken = () => sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
 export const setStoredToken = (token) => sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
